@@ -285,11 +285,44 @@ struct Parser
 	}
 };
 
+void printNode(const AstNode* const n, const int tab)
+{
+	auto const ident = [](int cnt) {
+		while(cnt) {
+			printf("\t");
+			cnt--;
+		}
+	};
+
+	ident(tab);
+
+	if(n->type == astNodeType_identifier)
+	{
+		const AstIdentifier* ident = (AstIdentifier*)n;
+		printf("ident(%s)\n", ident->identifier.c_str());
+	}
+	else if(n->type == astNodeType_number)
+	{
+		const AstNumber* num = (AstNumber*)n;
+		printf("num(%f)\n", num->value);
+	}
+	else if(n->type == astNodeType_binop)
+	{
+		const AstBinOp* op = (AstBinOp*)n;
+		printf("%c \n", op->op);
+		printNode(op->left, tab+1);
+		printNode(op->right, tab+1);
+	}
+	else
+	{
+		printf("???\n");
+	}
+}
 
 int main()
 {
 	const char* const testCode = R"(
-ident0 + 3*2
+x + 0*1*(2+y*(a+b))
 )";
 
 	Lexer lexer(testCode);
@@ -320,6 +353,7 @@ ident0 + 3*2
 	p.parse();
 	AstNode* root = p.root;
 
+	printNode(root, 0);
 
 	return 0;
 }
