@@ -140,6 +140,8 @@ enum AstNodeType
 	astNodeType_number,
 	astNodeType_identifier,
 	astNodeType_binop,
+	astNodeType_unop,
+	astNodeType_assign,
 };
 
 struct AstNode
@@ -183,7 +185,32 @@ struct AstBinOp : public AstNode
 
 	AstNode* left;
 	AstNode* right;
-	char op; // + i * /
+	char op; // + - * /
+};
+
+struct AstUnOp : public AstNode
+{
+	AstUnOp(char op, AstNode* left) 
+		: AstNode(astNodeType_unop)
+		, op(op)
+		, left(left)
+	{}
+
+	AstNode* left;
+	char op; // + -
+};
+
+struct AstAssign : public AstNode
+{
+	
+	AstAssign(AstNode* left, AstNode* right) 
+		: AstNode(astNodeType_assign)
+		, left(left)
+		, right(right)
+	{}
+
+	AstNode* left;
+	AstNode* right;
 };
 
 struct Parser
@@ -194,12 +221,12 @@ struct Parser
 
 	void parse()
 	{
-		root = parse_exporession();
+		root = parse_expression();
 	}
 
-	AstNode* parse_exporession()
+	AstNode* parse_expression()
 	{
-		return parse_expression2();
+		return parse_expression4();
 	}
 
 	AstNode* parse_exporession0()
@@ -219,7 +246,7 @@ struct Parser
 		else if(m_token->type == tokenType_lparen)
 		{
 			matchAny();
-			AstNode* const result =  parse_exporession();
+			AstNode* const result =  parse_expression();
 			match(tokenType_rparen);
 			return result;
 		}
@@ -235,13 +262,13 @@ struct Parser
 		if(m_token->type == tokenType_asterisk)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('*', left, parse_exporession());
+			AstNode* retval = new AstBinOp('*', left, parse_expression());
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('/', left, parse_exporession());
+			AstNode* retval = new AstBinOp('/', left, parse_expression());
 			return retval;
 		}
 
@@ -255,14 +282,46 @@ struct Parser
 		if(m_token->type == tokenType_plus)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('+', left, parse_exporession());
+			AstNode* retval = new AstBinOp('+', left, parse_expression());
 			return retval;
 		}
 		else if(m_token->type == tokenType_minus)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('-', left, parse_exporession());
+			AstNode* retval = new AstBinOp('-', left, parse_expression());
 			return retval;
+		}
+
+		return left;
+	}
+
+	AstNode* parse_expression3()
+	{
+		if(m_token->type == tokenType_minus)
+		{
+			matchAny();
+			AstUnOp* const result =  new AstUnOp('-', parse_expression());
+			return result;
+		}
+		else if(m_token->type == tokenType_plus)
+		{
+			matchAny();
+			AstUnOp* const result =  new AstUnOp('+', parse_expression());
+			return result;
+		}
+		
+		return parse_expression2();
+	}
+
+	AstNode* parse_expression4()
+	{
+		AstNode* left = parse_expression3();
+
+		if(m_token->type == tokenType_assign)
+		{
+			matchAny();
+			AstAssign* assign = new AstAssign(left, parse_expression());
+			return assign;
 		}
 
 		return left;
@@ -289,7 +348,7 @@ void printNode(const AstNode* const n, const int tab)
 {
 	auto const ident = [](int cnt) {
 		while(cnt) {
-			printf("\t");
+			printf("  ");
 			cnt--;
 		}
 	};
@@ -299,19 +358,34 @@ void printNode(const AstNode* const n, const int tab)
 	if(n->type == astNodeType_identifier)
 	{
 		const AstIdentifier* ident = (AstIdentifier*)n;
-		printf("ident(%s)\n", ident->identifier.c_str());
+		printf("ident(%s)", ident->identifier.c_str());
 	}
 	else if(n->type == astNodeType_number)
 	{
 		const AstNumber* num = (AstNumber*)n;
-		printf("num(%f)\n", num->value);
+		printf("num(%f)", num->value);
 	}
 	else if(n->type == astNodeType_binop)
 	{
 		const AstBinOp* op = (AstBinOp*)n;
-		printf("%c \n", op->op);
-		printNode(op->left, tab+1);
-		printNode(op->right, tab+1);
+		printf(" (%c ", op->op);
+		printNode(op->left, tab);
+		printf(" ");
+		printNode(op->right, tab);
+		printf(") ");
+	}
+	else if(n->type == astNodeType_assign)
+	{
+		const AstAssign* assign = (AstAssign*)n;
+		printNode(assign->left, tab);
+		printf(" = ");
+		printNode(assign->right, tab);
+	}
+	else if(n->type == astNodeType_unop)
+	{
+		const AstUnOp* op = (AstUnOp*)n;
+		printf("u%c", op->op);
+		printNode(op->left, tab);
 	}
 	else
 	{
@@ -322,7 +396,7 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
-x + 0*1*(2+y*(a+b))
+x = y+77/2*(321+1/1 = 2) = -0-+1*(2+-y*-(a+b))
 )";
 
 	Lexer lexer(testCode);
