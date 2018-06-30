@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <unordered_map>
+#include <locale>
 #include <assert.h>
 
 enum TokenType
@@ -20,7 +22,6 @@ enum TokenType
 	tokenType_rparen, // )
 };
 
-
 struct Token
 {
 	Token() = default;
@@ -33,8 +34,7 @@ struct Token
 	std::string strData;
 };
 
-bool isSign(char ch)
-{
+bool isSign(const char ch) {
 	return ch == '+' || ch == '-' || ch == '*' || ch == '/';
 }
 
@@ -142,6 +142,7 @@ enum AstNodeType
 	astNodeType_binop,
 	astNodeType_unop,
 	astNodeType_assign,
+	astNodeType_statementList,
 };
 
 struct AstNode
@@ -196,32 +197,57 @@ struct AstUnOp : public AstNode
 		, left(left)
 	{}
 
-	AstNode* left;
+	AstNode* left = nullptr;
 	char op; // + -
 };
 
 struct AstAssign : public AstNode
 {
-	
 	AstAssign(AstNode* left, AstNode* right) 
 		: AstNode(astNodeType_assign)
 		, left(left)
 		, right(right)
 	{}
 
-	AstNode* left;
-	AstNode* right;
+	AstNode* left = nullptr;
+	AstNode* right = nullptr;
+};
+
+struct AstStmntList : public AstNode
+{
+	AstStmntList() :
+		AstNode(astNodeType_statementList)
+	{}
+
+	std::vector<AstNode*> m_statements;
 };
 
 struct Parser
 {
-
 	AstNode* root = nullptr;
 	const Token* m_token = nullptr;
 
 	void parse()
 	{
-		root = parse_expression();
+		root = parse_statementList();
+	}
+
+	AstNode* parse_statementList()
+	{
+		AstStmntList* stmntList = new AstStmntList();
+
+		while(m_token->type != tokenType_none) {
+			AstNode* node = parse_expression();
+			if(node) {
+				stmntList->m_statements.push_back(node);
+			}
+			else {
+				assert(false);
+				break;
+			}
+		}
+
+		return stmntList;
 	}
 
 	AstNode* parse_expression()
@@ -262,13 +288,13 @@ struct Parser
 		if(m_token->type == tokenType_asterisk)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('*', left, parse_expression());
+			AstNode* retval = new AstBinOp('*', left, parse_exporession0());
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('/', left, parse_expression());
+			AstNode* retval = new AstBinOp('/', left, parse_exporession0());
 			return retval;
 		}
 
@@ -344,6 +370,124 @@ struct Parser
 	}
 };
 
+enum VarFlags
+{
+	var_flags_f32 = 1 << 1,
+};
+
+struct Var
+{
+	std::string n_name; // if applicable.
+	int m_flags = 0; // Flags of enum VarFlag
+
+	float m_value_f32 = 0.f;
+
+
+	void makeFloat32(const float value)
+	{
+		m_flags = var_flags_f32;
+		m_value_f32 = value;
+	}
+};
+
+struct Executor
+{
+	Var* newVariable(const char* name) {
+		Var* result = new Var();
+		if(name != nullptr) {
+			result->n_name = name;
+			m_variablesLut[name] = result;
+		}
+		return result;
+	}
+
+	Var* newVariable(float v) {
+		Var* var = newVariable(nullptr);
+		var->makeFloat32(v);
+		return var;
+	}
+
+	Var* findVariable(const std::string name)
+	{
+		auto itr = m_variablesLut.find(name);
+
+		if(itr == std::end(m_variablesLut)) {
+			return nullptr;
+		}
+
+		return itr->second;
+	}
+
+	Var* evaluate(const AstNode* const root)
+	{
+		switch(root->type)
+		{
+			case astNodeType_number:
+			{   
+				return newVariable(((AstNumber*)(root))->value);
+			}break;
+			case astNodeType_identifier:
+			{
+				const AstIdentifier* const n = (AstIdentifier*)root;
+				Var* const result = findVariable(n->identifier);
+
+				if(result == nullptr) {
+					return newVariable(n->identifier.c_str());
+				}
+
+				return result;
+			}break;
+			case astNodeType_binop:
+			{
+				const AstBinOp* const n = (AstBinOp*)root;
+				const Var* const left = evaluate(n->left);
+				const Var* const right = evaluate(n->right);
+
+				if(n->op == '+') return newVariable(left->m_value_f32 + right->m_value_f32);
+				if(n->op == '-') return newVariable(left->m_value_f32 - right->m_value_f32);
+				if(n->op == '*') return newVariable(left->m_value_f32 * right->m_value_f32);
+				if(n->op == '/') return newVariable(left->m_value_f32 / right->m_value_f32);
+				assert(false);
+				return nullptr;
+			}break;
+			case astNodeType_unop:
+			{
+				const AstUnOp* const n = (AstUnOp*)root;
+				const Var* const left = evaluate(n->left);
+
+				const float v = n->op == '-' ?  -left->m_value_f32 : left->m_value_f32;
+				return newVariable(v);
+
+			}break;
+			case astNodeType_assign:
+			{
+				const AstAssign* const n = (AstAssign*)root;
+				Var* const left = evaluate(n->left);
+				const Var* const right = evaluate(n->right);
+				left->m_value_f32 = right->m_value_f32;
+				return left;
+			}break;
+			case astNodeType_statementList:
+			{
+				const AstStmntList* const n = (AstStmntList*)root;
+				for(AstNode* node : n->m_statements)
+				{
+					evaluate(node);
+				}
+				return nullptr;
+			}break;
+		}
+
+		assert(false);
+		return nullptr;
+	}
+
+public :
+
+	std::unordered_map<std::string, Var*> m_variablesLut;
+	std::vector<Var*> m_allocatedVariables;
+};
+
 void printNode(const AstNode* const n, const int tab)
 {
 	auto const ident = [](int cnt) {
@@ -355,19 +499,27 @@ void printNode(const AstNode* const n, const int tab)
 
 	ident(tab);
 
-	if(n->type == astNodeType_identifier)
+	if(n->type == astNodeType_statementList)
 	{
-		const AstIdentifier* ident = (AstIdentifier*)n;
+		printf("Statement List:\n");
+		const AstStmntList* const stmntList = (AstStmntList*)n;
+		for(AstNode* node : stmntList->m_statements) {
+			printNode(node, tab + 1);
+		}
+	}
+	else if(n->type == astNodeType_identifier)
+	{
+		const AstIdentifier* const ident = (AstIdentifier*)n;
 		printf("ident(%s)", ident->identifier.c_str());
 	}
 	else if(n->type == astNodeType_number)
 	{
-		const AstNumber* num = (AstNumber*)n;
+		const AstNumber* const num = (AstNumber*)n;
 		printf("num(%f)", num->value);
 	}
 	else if(n->type == astNodeType_binop)
 	{
-		const AstBinOp* op = (AstBinOp*)n;
+		const AstBinOp* const op = (AstBinOp*)n;
 		printf(" (%c ", op->op);
 		printNode(op->left, tab);
 		printf(" ");
@@ -376,14 +528,15 @@ void printNode(const AstNode* const n, const int tab)
 	}
 	else if(n->type == astNodeType_assign)
 	{
-		const AstAssign* assign = (AstAssign*)n;
+		const AstAssign* const assign = (AstAssign*)n;
 		printNode(assign->left, tab);
 		printf(" = ");
 		printNode(assign->right, tab);
+		printf("\n");
 	}
 	else if(n->type == astNodeType_unop)
 	{
-		const AstUnOp* op = (AstUnOp*)n;
+		const AstUnOp* const op = (AstUnOp*)n;
 		printf("u%c", op->op);
 		printNode(op->left, tab);
 	}
@@ -396,7 +549,8 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
-x = y+77/2*(321+1/1 = 2) = -0-+1*(2+-y*-(a+b))
+x = 3 * 2 + 4
+y = x + 1
 )";
 
 	Lexer lexer(testCode);
@@ -429,5 +583,15 @@ x = y+77/2*(321+1/1 = 2) = -0-+1*(2+-y*-(a+b))
 
 	printNode(root, 0);
 
+	printf("-------------------------------------\n");
+	Executor e;
+	e.evaluate(root);
+
+	for(auto p : e.m_variablesLut)
+	{
+		printf("%s = %f \n", p.first.c_str(), p.second->m_value_f32);
+	}
+
+	system("pause");
 	return 0;
 }
