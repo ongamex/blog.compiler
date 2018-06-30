@@ -255,7 +255,7 @@ struct Parser
 		return parse_expression4();
 	}
 
-	AstNode* parse_exporession0()
+	AstNode* parse_expression0()
 	{
 		if(m_token->type == tokenType_number)
 		{
@@ -283,18 +283,18 @@ struct Parser
 
 	AstNode* parse_expression1()
 	{
-		AstNode* left = parse_exporession0();
+		AstNode* left = parse_expression0();
 
 		if(m_token->type == tokenType_asterisk)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('*', left, parse_exporession0());
+			AstNode* retval = new AstBinOp('*', left, parse_expression1());
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('/', left, parse_exporession0());
+			AstNode* retval = new AstBinOp('/', left, parse_expression1());
 			return retval;
 		}
 
@@ -549,8 +549,8 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
-x = 3 * 2 + 4
-y = x + 1
+2 + 4
+4
 )";
 
 	Lexer lexer(testCode);
