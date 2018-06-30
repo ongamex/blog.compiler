@@ -12,14 +12,22 @@ enum TokenType
 	tokenType_identifier,
 
 	//
-	tokenType_semicolon, // ;
+	//tokenType_semicolon, // ;
 	tokenType_assign, // =
+	tokenType_equals, // ==
 	tokenType_plus, // +
 	tokenType_minus, // -
 	tokenType_asterisk, // *
 	tokenType_slash, // /
 	tokenType_lparen, // (
 	tokenType_rparen, // )
+	tokenType_blockBegin, // {
+	tokenType_blockEnd, // }
+
+	//
+	tokenType_if,
+	tokenType_else,
+
 };
 
 struct Token
@@ -65,7 +73,7 @@ struct Lexer
 		{
 			Token token;
 
-			// This should be an indentifier.
+			// This should be an indentifier or a keyword.
 			token.type = tokenType_identifier;
 			while(isalpha(*m_ptr) || *m_ptr == '_'|| isdigit(*m_ptr))
 			{
@@ -73,15 +81,30 @@ struct Lexer
 				m_ptr++;
 			}
 
+			if(token.strData == "if") {
+				token.type = tokenType_if;
+				token.strData.clear();
+			}
+			else if(token.strData == "else") {
+				token.type = tokenType_else;
+				token.strData.clear();
+			}
+
 			return token;
 		}
 		else if(*m_ptr == ';') {
 			m_ptr++;
-			return Token(tokenType_semicolon);
+			return getNextToken();
+			//return Token(tokenType_semicolon);
 		}
 		else if(*m_ptr == '=') {
-			m_ptr++;
-			return Token(tokenType_assign);
+			if(m_ptr[1] == '=') {
+				m_ptr+=2;
+				return Token(tokenType_equals);
+			} else {
+				m_ptr++;
+				return Token(tokenType_assign);
+			}
 		}
 		else if(*m_ptr == '*') {
 			m_ptr++;
@@ -142,7 +165,9 @@ enum AstNodeType
 	astNodeType_binop,
 	astNodeType_unop,
 	astNodeType_assign,
-	astNodeType_statementList,
+	astNoteType_statementList,
+	astNoteType_if,
+
 };
 
 struct AstNode
@@ -213,13 +238,25 @@ struct AstAssign : public AstNode
 	AstNode* right = nullptr;
 };
 
-struct AstStmntList : public AstNode
+struct AstStatementList : public AstNode
 {
-	AstStmntList() :
-		AstNode(astNodeType_statementList)
+	AstStatementList() :
+		AstNode(astNoteType_statementList)
 	{}
 
 	std::vector<AstNode*> m_statements;
+
+};
+
+struct AstIf : public AstNode
+{
+	AstIf() :
+		AstNode(astNoteType_if)
+	{}
+
+	AstNode* expression = nullptr;
+	AstNode* trueBranchStatement = nullptr;
+	AstNode* falseBranchStatement = nullptr;
 };
 
 struct Parser
@@ -229,17 +266,66 @@ struct Parser
 
 	void parse()
 	{
-		root = parse_statementList();
+		root = parse_programRoot();
 	}
 
-	AstNode* parse_statementList()
+	// A block of statements or a single statement.
+	AstNode* parse_statement()
 	{
-		AstStmntList* stmntList = new AstStmntList();
+		AstStatementList* const stmntList = new AstStatementList();
 
-		while(m_token->type != tokenType_none) {
+		if(m_token->type == tokenType_blockBegin) {
+
+			matchAny();
+
+			while(m_token->type != tokenType_blockEnd) {
+
+				AstNode* node = nullptr;
+				{
+					node = parse_statement();
+				}
+
+				if(node) {
+					stmntList->m_statements.push_back(node);
+				} else {
+					assert(false);
+					break;
+				}
+			}
+
+			match(tokenType_blockEnd);
+		} 
+		else if(m_token->type == tokenType_if)
+		{
+			match(tokenType_if);
+			AstIf* const astIf = new AstIf();
+			astIf->expression = parse_expression();
+			astIf->trueBranchStatement = parse_statement();
+
+			if(m_token->type == tokenType_else) {
+				matchAny();
+				astIf->falseBranchStatement = parse_statement();
+			}
+
+			stmntList->m_statements.push_back(astIf);
+		} else {
 			AstNode* node = parse_expression();
 			if(node) {
 				stmntList->m_statements.push_back(node);
+			}
+		}
+
+		return stmntList;
+	}
+
+	AstNode* parse_programRoot()
+	{
+		AstStatementList* progRoot = new AstStatementList();
+
+		while(m_token->type != tokenType_none) {
+			AstNode* node = parse_statement();
+			if(node) {
+				progRoot->m_statements.push_back(node);
 			}
 			else {
 				assert(false);
@@ -247,12 +333,12 @@ struct Parser
 			}
 		}
 
-		return stmntList;
+		return progRoot;
 	}
 
 	AstNode* parse_expression()
 	{
-		return parse_expression4();
+		return parse_expression5();
 	}
 
 	AstNode* parse_expression0()
@@ -285,17 +371,11 @@ struct Parser
 	{
 		AstNode* left = parse_expression0();
 
-		if(m_token->type == tokenType_asterisk)
+		if(m_token->type == tokenType_equals)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('*', left, parse_expression1());
-			return retval;
-		}
-		else if(m_token->type == tokenType_slash)
-		{
-			matchAny();
-			AstNode* retval = new AstBinOp('/', left, parse_expression1());
-			return retval;
+			AstBinOp* equals = new AstBinOp('=', left, parse_expression());
+			return equals;
 		}
 
 		return left;
@@ -304,6 +384,26 @@ struct Parser
 	AstNode* parse_expression2()
 	{
 		AstNode* left = parse_expression1();
+
+		if(m_token->type == tokenType_asterisk)
+		{
+			matchAny();
+			AstNode* retval = new AstBinOp('*', left, parse_expression2());
+			return retval;
+		}
+		else if(m_token->type == tokenType_slash)
+		{
+			matchAny();
+			AstNode* retval = new AstBinOp('/', left, parse_expression2());
+			return retval;
+		}
+
+		return left;
+	}
+
+	AstNode* parse_expression3()
+	{
+		AstNode* left = parse_expression2();
 
 		if(m_token->type == tokenType_plus)
 		{
@@ -321,7 +421,8 @@ struct Parser
 		return left;
 	}
 
-	AstNode* parse_expression3()
+
+	AstNode* parse_expression4()
 	{
 		if(m_token->type == tokenType_minus)
 		{
@@ -336,12 +437,12 @@ struct Parser
 			return result;
 		}
 		
-		return parse_expression2();
+		return parse_expression3();
 	}
 
-	AstNode* parse_expression4()
+	AstNode* parse_expression5()
 	{
-		AstNode* left = parse_expression3();
+		AstNode* left = parse_expression4();
 
 		if(m_token->type == tokenType_assign)
 		{
@@ -447,6 +548,8 @@ struct Executor
 				if(n->op == '-') return newVariable(left->m_value_f32 - right->m_value_f32);
 				if(n->op == '*') return newVariable(left->m_value_f32 * right->m_value_f32);
 				if(n->op == '/') return newVariable(left->m_value_f32 / right->m_value_f32);
+				if(n->op == '=') return newVariable(left->m_value_f32 == right->m_value_f32);
+
 				assert(false);
 				return nullptr;
 			}break;
@@ -467,13 +570,27 @@ struct Executor
 				left->m_value_f32 = right->m_value_f32;
 				return left;
 			}break;
-			case astNodeType_statementList:
+			case astNoteType_statementList:
 			{
-				const AstStmntList* const n = (AstStmntList*)root;
+				const AstStatementList* const n = (AstStatementList*)root;
 				for(AstNode* node : n->m_statements)
 				{
 					evaluate(node);
 				}
+				return nullptr;
+			}break;
+			case astNoteType_if:
+			{
+				const AstIf* const n = (AstIf*)root;
+				const Var* const expr = evaluate(n->expression);
+
+				if(expr->m_value_f32 != 0.f) {
+					return evaluate(n->trueBranchStatement);
+				}
+				else if(n->falseBranchStatement) {
+					return evaluate(n->falseBranchStatement);
+				}
+
 				return nullptr;
 			}break;
 		}
@@ -499,11 +616,11 @@ void printNode(const AstNode* const n, const int tab)
 
 	ident(tab);
 
-	if(n->type == astNodeType_statementList)
+	if(n->type == astNoteType_statementList)
 	{
 		printf("Statement List:\n");
-		const AstStmntList* const stmntList = (AstStmntList*)n;
-		for(AstNode* node : stmntList->m_statements) {
+		const AstStatementList* const progRoot = (AstStatementList*)n;
+		for(AstNode* node : progRoot->m_statements) {
 			printNode(node, tab + 1);
 		}
 	}
@@ -549,8 +666,13 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
-2 + 4
-4
+x = 5
+x = x + 5
+if x == 11
+	x = x + 1
+else if x == 10
+	x = x - 1
+y = x * (1 + 2)
 )";
 
 	Lexer lexer(testCode);
@@ -564,7 +686,7 @@ int main()
 	
 		if(tok.type == tokenType_number) printf("%f ", tok.numberData);
 		if(tok.type == tokenType_identifier) printf("IDENT(%s) ", tok.strData.c_str());
-		if(tok.type == tokenType_semicolon) printf("; \n");
+		//if(tok.type == tokenType_semicolon) printf("; \n");
 		if(tok.type == tokenType_assign) printf("= ");
 		if(tok.type == tokenType_plus) printf("+ ");
 		if(tok.type == tokenType_minus) printf("- ");
