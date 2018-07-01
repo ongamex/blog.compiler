@@ -5,15 +5,14 @@
 #include <locale>
 #include <assert.h>
 
-enum TokenType
+enum TokenType : int
 {
 	tokenType_none,
 	tokenType_number,
 	tokenType_identifier,
 	tokenType_string,
 
-	//
-	//tokenType_semicolon, // ;
+	// operators.
 	tokenType_assign, // =
 	tokenType_less, // <
 	tokenType_greater, // >
@@ -30,11 +29,11 @@ enum TokenType
 	tokenType_blockBegin, // {
 	tokenType_blockEnd, // }
 
-	//
+	// keywords.
 	tokenType_if,
 	tokenType_else,
+	tokenType_while,
 	tokenType_print,
-
 };
 
 struct Token
@@ -48,10 +47,6 @@ struct Token
 	float numberData;
 	std::string strData;
 };
-
-bool isSign(const char ch) {
-	return ch == '+' || ch == '-' || ch == '*' || ch == '/';
-}
 
 struct Lexer
 {
@@ -78,11 +73,10 @@ struct Lexer
 		}
 		else if(isalpha(*m_ptr) || *m_ptr == '_')
 		{
-			Token token;
-
 			// This should be an indentifier or a keyword.
-			token.type = tokenType_identifier;
-			while(isalpha(*m_ptr) || *m_ptr == '_'|| isdigit(*m_ptr))
+
+			Token token;
+			while(isalpha(*m_ptr) || *m_ptr == '_' || isdigit(*m_ptr))
 			{
 				token.strData.push_back(*m_ptr);
 				m_ptr++;
@@ -99,6 +93,13 @@ struct Lexer
 			else if(token.strData == "print") {
 				token.type = tokenType_print;
 				token.strData.clear();
+			} 
+			else if(token.strData == "while") {
+				token.type = tokenType_while;
+				token.strData.clear();
+			}
+			else {
+				token.type = tokenType_identifier;
 			}
 
 			return token;
@@ -117,11 +118,6 @@ struct Lexer
 			m_ptr++;
 
 			return token;
-		}
-		else if(*m_ptr == ';') {
-			m_ptr++;
-			return getNextToken();
-			//return Token(tokenType_semicolon);
 		}
 		else if(*m_ptr == '=') {
 			if(m_ptr[1] == '=') {
@@ -182,9 +178,20 @@ struct Lexer
 			// TODO: Floating point numbers.
 			float numberAccum = 0;
 			while(isdigit(*m_ptr)){
-				int digit = *m_ptr - '0';
-				numberAccum = numberAccum*10.f + (float)digit;
+				const int digit = *m_ptr - '0';
+				numberAccum = numberAccum*10.f + float(digit);
 				m_ptr++;
+			}
+
+			if(*m_ptr == '.')
+			{
+				float mult = 0.1f;
+				m_ptr++;
+				while(isdigit(*m_ptr)){
+					const int digit = *m_ptr - '0';
+					numberAccum += mult * float(digit);
+					m_ptr++;
+				}
 			}
 
 			Token token;
@@ -214,6 +221,7 @@ enum AstNodeType
 	astNodeType_assign,
 	astNodeType_statementList,
 	astNodeType_if,
+	astNodeType_while,
 	astNodeType_print,
 
 };
@@ -329,6 +337,16 @@ struct AstIf : public AstNode
 	AstNode* falseBranchStatement = nullptr;
 };
 
+struct AstWhile : public AstNode
+{
+	AstWhile() :
+		AstNode(astNodeType_while)
+	{}
+
+	AstNode* expression = nullptr;
+	AstNode* trueBranchStatement = nullptr;
+};
+
 struct AstPrint : public AstNode
 {
 	AstPrint(AstNode* expression) :
@@ -356,13 +374,9 @@ struct Parser
 			matchAny();
 
 			AstStatementList* const stmntList = new AstStatementList();
-			while(m_token->type != tokenType_blockEnd) {
-
-				AstNode* node = nullptr;
-				{
-					node = parse_statement();
-				}
-
+			while(m_token->type != tokenType_blockEnd)
+			{
+				AstNode* node = parse_statement();
 				if(node) {
 					stmntList->m_statements.push_back(node);
 				} else {
@@ -393,7 +407,17 @@ struct Parser
 			}
 
 			return astIf;
-		} else {
+		}
+		else if(m_token->type == tokenType_while)
+		{
+			match(tokenType_while);
+			AstWhile* const astWhile = new AstWhile();
+			astWhile->expression = parse_expression();
+			astWhile->trueBranchStatement = parse_statement();
+
+			return astWhile;
+		}
+		else {
 			return parse_expression();
 		}
 
@@ -742,6 +766,18 @@ struct Executor
 
 				return nullptr;
 			}break;
+			case astNodeType_while:
+			{
+				const AstWhile* const n = (AstWhile*)root;
+				const Var* expr = evaluate(n->expression);
+
+				while(expr->m_value_f32 != 0.f) {
+					evaluate(n->trueBranchStatement);
+					expr = evaluate(n->expression);
+				}
+	
+				return nullptr;
+			}break;
 			case astNodeType_print:
 			{
 				const AstPrint* const n = (AstPrint*)root;
@@ -839,6 +875,12 @@ if x != 10 {
 	z = 999
 	print "false"
 }
+
+t = 0
+while t != 10 {
+	print t
+	t = t + 1
+}
 y = x * (1 + 1)
 print "y = "
 print y
@@ -856,7 +898,6 @@ print "loktar ogar"
 	
 		if(tok.type == tokenType_number) printf("%f ", tok.numberData);
 		if(tok.type == tokenType_identifier) printf("IDENT(%s) ", tok.strData.c_str());
-		//if(tok.type == tokenType_semicolon) printf("; \n");
 		if(tok.type == tokenType_assign) printf("= ");
 		if(tok.type == tokenType_plus) printf("+ ");
 		if(tok.type == tokenType_minus) printf("- ");
