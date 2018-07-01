@@ -10,6 +10,7 @@ enum TokenType
 	tokenType_none,
 	tokenType_number,
 	tokenType_identifier,
+	tokenType_string,
 
 	//
 	//tokenType_semicolon, // ;
@@ -32,6 +33,7 @@ enum TokenType
 	//
 	tokenType_if,
 	tokenType_else,
+	tokenType_print,
 
 };
 
@@ -94,6 +96,25 @@ struct Lexer
 				token.type = tokenType_else;
 				token.strData.clear();
 			}
+			else if(token.strData == "print") {
+				token.type = tokenType_print;
+				token.strData.clear();
+			}
+
+			return token;
+		}
+		else if(*m_ptr == '"')
+		{
+			Token token;
+			token.type = tokenType_string;
+
+			m_ptr++;
+			while(*m_ptr!='"')
+			{
+				token.strData.push_back(*m_ptr);
+				m_ptr++;
+			}
+			m_ptr++;
 
 			return token;
 		}
@@ -186,12 +207,14 @@ enum AstNodeType
 {
 	astNodeType_invalid,
 	astNodeType_number,
+	astNodeType_string,
 	astNodeType_identifier,
 	astNodeType_binop,
 	astNodeType_unop,
 	astNodeType_assign,
-	astNoteType_statementList,
-	astNoteType_if,
+	astNodeType_statementList,
+	astNodeType_if,
+	astNodeType_print,
 
 };
 
@@ -213,6 +236,16 @@ struct AstNumber : public AstNode
 	{}
 
 	float value = NAN;
+};
+
+struct AstString : public AstNode
+{
+	AstString(std::string s) 
+		: AstNode(astNodeType_string)
+		, value(std::move(s))
+	{}
+
+	std::string value;
 };
 
 struct AstIdentifier : public AstNode
@@ -278,7 +311,7 @@ struct AstAssign : public AstNode
 struct AstStatementList : public AstNode
 {
 	AstStatementList() :
-		AstNode(astNoteType_statementList)
+		AstNode(astNodeType_statementList)
 	{}
 
 	std::vector<AstNode*> m_statements;
@@ -288,12 +321,22 @@ struct AstStatementList : public AstNode
 struct AstIf : public AstNode
 {
 	AstIf() :
-		AstNode(astNoteType_if)
+		AstNode(astNodeType_if)
 	{}
 
 	AstNode* expression = nullptr;
 	AstNode* trueBranchStatement = nullptr;
 	AstNode* falseBranchStatement = nullptr;
+};
+
+struct AstPrint : public AstNode
+{
+	AstPrint(AstNode* expression) :
+		AstNode(astNodeType_print),
+		expression(expression)
+	{}
+
+	AstNode* expression;
 };
 
 struct Parser
@@ -332,6 +375,13 @@ struct Parser
 
 			match(tokenType_blockEnd);
 		} 
+		else if(m_token->type == tokenType_print)
+		{
+			matchAny();
+			AstPrint* const astPrint = new AstPrint(parse_expression());
+			stmntList->m_statements.push_back(astPrint);
+
+		}
 		else if(m_token->type == tokenType_if)
 		{
 			match(tokenType_if);
@@ -383,6 +433,12 @@ struct Parser
 		if(m_token->type == tokenType_number)
 		{
 			AstNode* const result =  new AstNumber(m_token->numberData);
+			matchAny();
+			return result;
+		}
+		if(m_token->type == tokenType_string)
+		{
+			AstNode* const result =  new AstString(m_token->strData);
 			matchAny();
 			return result;
 		}
@@ -534,30 +590,42 @@ struct Parser
 	}
 };
 
-enum VarFlags
+enum VarType : int
 {
-	var_flags_f32 = 1 << 1,
+	varType_undefined,
+	varType_f32,
+	varType_string,
 };
 
 struct Var
 {
 	std::string n_name; // if applicable.
-	int m_flags = 0; // Flags of enum VarFlag
+	VarType m_varType = varType_undefined; // Flags of enum VarFlag
 
 	float m_value_f32 = 0.f;
+	std::string m_value_string;
 
+	Var(VarType const varType)
+		: m_varType(varType)
+	{}
 
 	void makeFloat32(const float value)
 	{
-		m_flags = var_flags_f32;
+		m_varType = varType_f32;
 		m_value_f32 = value;
+	}
+
+	void makeString(std::string s)
+	{
+		m_varType = varType_string;
+		m_value_string = std::move(s);
 	}
 };
 
 struct Executor
 {
-	Var* newVariable(const char* name) {
-		Var* result = new Var();
+	Var* newVariable(const char* const name, const VarType varType) {
+		Var* const result = new Var(varType);
 		if(name != nullptr) {
 			result->n_name = name;
 			m_variablesLut[name] = result;
@@ -566,15 +634,19 @@ struct Executor
 	}
 
 	Var* newVariable(float v) {
-		Var* var = newVariable(nullptr);
+		Var* var = newVariable(nullptr, (VarType)0); // HACK
 		var->makeFloat32(v);
 		return var;
 	}
 
-	Var* findVariable(const std::string name)
-	{
-		auto itr = m_variablesLut.find(name);
+	Var* newVariableString(std::string v) {
+		Var* var = newVariable(0);
+		var->makeString(std::move(v));
+		return var;
+	}
 
+	Var* findVariable(const std::string name) {
+		auto itr = m_variablesLut.find(name);
 		if(itr == std::end(m_variablesLut)) {
 			return nullptr;
 		}
@@ -590,13 +662,17 @@ struct Executor
 			{   
 				return newVariable(((AstNumber*)(root))->value);
 			}break;
+			case astNodeType_string:
+			{   
+				return newVariableString(((AstString*)(root))->value); // string
+			}break;
 			case astNodeType_identifier:
 			{
 				const AstIdentifier* const n = (AstIdentifier*)root;
 				Var* const result = findVariable(n->identifier);
 
 				if(result == nullptr) {
-					return newVariable(n->identifier.c_str());
+					return newVariable(n->identifier.c_str(), varType_undefined);
 				}
 
 				return result;
@@ -606,6 +682,11 @@ struct Executor
 				const AstBinOp* const n = (AstBinOp*)root;
 				const Var* const left = evaluate(n->left);
 				const Var* const right = evaluate(n->right);
+
+				if(left->m_varType != varType_f32 || right->m_varType != varType_f32) {
+					assert(false);
+					return nullptr;
+				}
 
 				if(n->op == binop_add) return newVariable(left->m_value_f32 + right->m_value_f32);
 				else if(n->op == binop_sub) return newVariable(left->m_value_f32 - right->m_value_f32);
@@ -624,6 +705,11 @@ struct Executor
 				const AstUnOp* const n = (AstUnOp*)root;
 				const Var* const left = evaluate(n->left);
 
+				if(left->m_varType != varType_f32) {
+					assert(false);
+					return nullptr;
+				}
+
 				const float v = n->op == '-' ?  -left->m_value_f32 : left->m_value_f32;
 				return newVariable(v);
 
@@ -634,9 +720,10 @@ struct Executor
 				Var* const left = evaluate(n->left);
 				const Var* const right = evaluate(n->right);
 				left->m_value_f32 = right->m_value_f32;
+				left->m_varType = right->m_varType;
 				return left;
 			}break;
-			case astNoteType_statementList:
+			case astNodeType_statementList:
 			{
 				const AstStatementList* const n = (AstStatementList*)root;
 				for(AstNode* node : n->m_statements)
@@ -645,7 +732,7 @@ struct Executor
 				}
 				return nullptr;
 			}break;
-			case astNoteType_if:
+			case astNodeType_if:
 			{
 				const AstIf* const n = (AstIf*)root;
 				const Var* const expr = evaluate(n->expression);
@@ -656,6 +743,20 @@ struct Executor
 				else if(n->falseBranchStatement) {
 					return evaluate(n->falseBranchStatement);
 				}
+
+				return nullptr;
+			}break;
+			case astNodeType_print:
+			{
+				const AstPrint* const n = (AstPrint*)root;
+				const Var* const expr = evaluate(n->expression);
+
+				if(expr->m_varType == varType_f32)
+					printf("%f\n", expr->m_value_f32);
+				else if(expr->m_varType == varType_string)
+					printf("%s\n", expr->m_value_string.c_str());
+				else
+					printf("<undefined>\n");
 
 				return nullptr;
 			}break;
@@ -682,7 +783,7 @@ void printNode(const AstNode* const n, const int tab)
 
 	ident(tab);
 
-	if(n->type == astNoteType_statementList)
+	if(n->type == astNodeType_statementList)
 	{
 		printf("Statement List:\n");
 		const AstStatementList* const progRoot = (AstStatementList*)n;
@@ -736,11 +837,16 @@ x = 5
 x = x + 5
 if x != 10 {
 	x = x + 1
+	print "true"
 } else if x == 10 {
 	x = x - 1
 	z = 999
+	print "false"
 }
 y = x * (1 + 1)
+print "y = "
+print y
+print "loktar ogar"
 )";
 
 	Lexer lexer(testCode);
@@ -773,13 +879,20 @@ y = x * (1 + 1)
 
 	printNode(root, 0);
 
-	printf("-------------------------------------\n");
+	printf("-------------------------------------Execution:\n");
 	Executor e;
 	e.evaluate(root);
 
+	printf("-------------------------------------Variables:\n");
+
 	for(auto p : e.m_variablesLut)
 	{
-		printf("%s = %f \n", p.first.c_str(), p.second->m_value_f32);
+		if(p.second->m_varType == varType_f32)
+			printf("%s = %f \n", p.first.c_str(), p.second->m_value_f32);
+		else if(p.second->m_varType == varType_string)
+			printf("%s = %s \n", p.first.c_str(), p.second->m_value_string.c_str());
+		else
+			printf("%s = <undefined> \n", p.first.c_str());
 	}
 
 	system("pause");
