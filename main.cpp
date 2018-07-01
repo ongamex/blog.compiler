@@ -74,7 +74,6 @@ struct Lexer
 		else if(isalpha(*m_ptr) || *m_ptr == '_')
 		{
 			// This should be an indentifier or a keyword.
-
 			Token token;
 			while(isalpha(*m_ptr) || *m_ptr == '_' || isdigit(*m_ptr))
 			{
@@ -175,7 +174,6 @@ struct Lexer
 		else if(isdigit(*m_ptr))
 		{
 			// This should be a number.
-			// TODO: Floating point numbers.
 			float numberAccum = 0;
 			while(isdigit(*m_ptr)){
 				const int digit = *m_ptr - '0';
@@ -482,27 +480,45 @@ struct Parser
 
 	AstNode* parse_expression1()
 	{
-		AstNode* left = parse_expression0();
+		if(m_token->type == tokenType_minus)
+		{
+			matchAny();
+			AstUnOp* const result =  new AstUnOp('-', parse_expression());
+			return result;
+		}
+		else if(m_token->type == tokenType_plus)
+		{
+			matchAny();
+			AstUnOp* const result =  new AstUnOp('+', parse_expression());
+			return result;
+		}
+
+		return parse_expression0();
+	}
+
+	AstNode* parse_expression2()
+	{
+		AstNode* left = parse_expression1();
 
 		if(m_token->type == tokenType_asterisk)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression0());
+			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression2());
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp(binop_div, left, parse_expression0());
+			AstNode* retval = new AstBinOp(binop_div, left, parse_expression2());
 			return retval;
 		}
 
 		return left;
 	}
 
-	AstNode* parse_expression2()
+	AstNode* parse_expression3()
 	{
-		AstNode* left = parse_expression1();
+		AstNode* left = parse_expression2();
 
 		if(m_token->type == tokenType_plus)
 		{
@@ -518,25 +534,6 @@ struct Parser
 		}
 
 		return left;
-	}
-
-
-	AstNode* parse_expression3()
-	{
-		if(m_token->type == tokenType_minus)
-		{
-			matchAny();
-			AstUnOp* const result =  new AstUnOp('-', parse_expression());
-			return result;
-		}
-		else if(m_token->type == tokenType_plus)
-		{
-			matchAny();
-			AstUnOp* const result =  new AstUnOp('+', parse_expression());
-			return result;
-		}
-		
-		return parse_expression2();
 	}
 
 	AstNode* parse_expression4()
@@ -865,15 +862,13 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
-x = 5
-x = x + 5
+x = 3 * 2 * 4 * -(3 * 5) == -1
+print x
+x = 1 + (x + 5) * 3 
 if x != 10 {
 	x = x + 1
-	print "true"
 } else if x == 10 {
 	x = x - 1
-	z = 999
-	print "false"
 }
 
 t = 0
@@ -881,10 +876,7 @@ while t != 10 {
 	print t
 	t = t + 1
 }
-y = x * (1 + 1)
-print "y = "
-print y
-print "loktar ogar"
+print "Zdrasti!"
 )";
 
 	Lexer lexer(testCode);
