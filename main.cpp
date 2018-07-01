@@ -14,7 +14,12 @@ enum TokenType
 	//
 	//tokenType_semicolon, // ;
 	tokenType_assign, // =
+	tokenType_less, // <
+	tokenType_greater, // >
+	//tokenType_lessEquals, // <=
+	//tokenType_greaterEquals, // >=
 	tokenType_equals, // ==
+	tokenType_notEquals, // !=
 	tokenType_plus, // +
 	tokenType_minus, // -
 	tokenType_asterisk, // *
@@ -106,6 +111,18 @@ struct Lexer
 				return Token(tokenType_assign);
 			}
 		}
+		else if(m_ptr[0] == '!' && m_ptr[1] == '=') {
+			m_ptr+=2;
+			return Token(tokenType_notEquals);
+		}
+		else if(*m_ptr == '<') {
+			m_ptr++;
+			return Token(tokenType_less);
+		}
+		else if(*m_ptr == '>') {
+			m_ptr++;
+			return Token(tokenType_greater);
+		}
 		else if(*m_ptr == '*') {
 			m_ptr++;
 			return Token(tokenType_asterisk);
@@ -129,6 +146,14 @@ struct Lexer
 		else if(*m_ptr == ')') {
 			m_ptr++;
 			return Token(tokenType_rparen);
+		}
+		else if(*m_ptr == '{') {
+			m_ptr++;
+			return Token(tokenType_blockBegin);
+		}
+		else if(*m_ptr == '}') {
+			m_ptr++;
+			return Token(tokenType_blockEnd);
 		}
 		else if(isdigit(*m_ptr))
 		{
@@ -200,9 +225,21 @@ struct AstIdentifier : public AstNode
 	std::string identifier;
 };
 
+enum BinOp : int
+{
+	binop_add,
+	binop_sub,
+	binop_mul,
+	binop_div,
+	binop_equals,
+	binop_notEquals,
+	binop_less,
+	binop_greater,
+};
+
 struct AstBinOp : public AstNode
 {
-	AstBinOp(char op, AstNode* left, AstNode* right) 
+	AstBinOp(const BinOp op, AstNode* const left, AstNode* const right) 
 		: AstNode(astNodeType_binop)
 		, op(op)
 		, left(left)
@@ -211,7 +248,7 @@ struct AstBinOp : public AstNode
 
 	AstNode* left;
 	AstNode* right;
-	char op; // + - * /
+	BinOp op;
 };
 
 struct AstUnOp : public AstNode
@@ -338,7 +375,7 @@ struct Parser
 
 	AstNode* parse_expression()
 	{
-		return parse_expression5();
+		return parse_expression6();
 	}
 
 	AstNode* parse_expression0()
@@ -371,11 +408,17 @@ struct Parser
 	{
 		AstNode* left = parse_expression0();
 
-		if(m_token->type == tokenType_equals)
+		if(m_token->type == tokenType_asterisk)
 		{
 			matchAny();
-			AstBinOp* equals = new AstBinOp('=', left, parse_expression());
-			return equals;
+			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression0());
+			return retval;
+		}
+		else if(m_token->type == tokenType_slash)
+		{
+			matchAny();
+			AstNode* retval = new AstBinOp(binop_div, left, parse_expression0());
+			return retval;
 		}
 
 		return left;
@@ -385,36 +428,16 @@ struct Parser
 	{
 		AstNode* left = parse_expression1();
 
-		if(m_token->type == tokenType_asterisk)
-		{
-			matchAny();
-			AstNode* retval = new AstBinOp('*', left, parse_expression2());
-			return retval;
-		}
-		else if(m_token->type == tokenType_slash)
-		{
-			matchAny();
-			AstNode* retval = new AstBinOp('/', left, parse_expression2());
-			return retval;
-		}
-
-		return left;
-	}
-
-	AstNode* parse_expression3()
-	{
-		AstNode* left = parse_expression2();
-
 		if(m_token->type == tokenType_plus)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('+', left, parse_expression());
+			AstNode* retval = new AstBinOp(binop_add, left, parse_expression());
 			return retval;
 		}
 		else if(m_token->type == tokenType_minus)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp('-', left, parse_expression());
+			AstNode* retval = new AstBinOp(binop_sub, left, parse_expression());
 			return retval;
 		}
 
@@ -422,7 +445,7 @@ struct Parser
 	}
 
 
-	AstNode* parse_expression4()
+	AstNode* parse_expression3()
 	{
 		if(m_token->type == tokenType_minus)
 		{
@@ -437,12 +460,52 @@ struct Parser
 			return result;
 		}
 		
-		return parse_expression3();
+		return parse_expression2();
+	}
+
+	AstNode* parse_expression4()
+	{
+		AstNode* left = parse_expression3();
+
+		if(m_token->type == tokenType_equals)
+		{
+			matchAny();
+			AstBinOp* equals = new AstBinOp(binop_equals, left, parse_expression());
+			return equals;
+		} 
+		else if(m_token->type == tokenType_notEquals)
+		{
+			matchAny();
+			AstBinOp* equals = new AstBinOp(binop_notEquals, left, parse_expression());
+			return equals;
+		}
+
+		return left;
 	}
 
 	AstNode* parse_expression5()
 	{
 		AstNode* left = parse_expression4();
+
+		if(m_token->type == tokenType_less)
+		{
+			matchAny();
+			AstBinOp* equals = new AstBinOp(binop_less, left, parse_expression());
+			return equals;
+		}
+		else if(m_token->type == tokenType_greater)
+		{
+			matchAny();
+			AstBinOp* equals = new AstBinOp(binop_greater, left, parse_expression());
+			return equals;
+		}
+
+		return left;
+	}
+
+	AstNode* parse_expression6()
+	{
+		AstNode* left = parse_expression5();
 
 		if(m_token->type == tokenType_assign)
 		{
@@ -544,11 +607,14 @@ struct Executor
 				const Var* const left = evaluate(n->left);
 				const Var* const right = evaluate(n->right);
 
-				if(n->op == '+') return newVariable(left->m_value_f32 + right->m_value_f32);
-				if(n->op == '-') return newVariable(left->m_value_f32 - right->m_value_f32);
-				if(n->op == '*') return newVariable(left->m_value_f32 * right->m_value_f32);
-				if(n->op == '/') return newVariable(left->m_value_f32 / right->m_value_f32);
-				if(n->op == '=') return newVariable(left->m_value_f32 == right->m_value_f32);
+				if(n->op == binop_add) return newVariable(left->m_value_f32 + right->m_value_f32);
+				else if(n->op == binop_sub) return newVariable(left->m_value_f32 - right->m_value_f32);
+				else if(n->op == binop_mul) return newVariable(left->m_value_f32 * right->m_value_f32);
+				else if(n->op == binop_div) return newVariable(left->m_value_f32 / right->m_value_f32);
+				else if(n->op == binop_equals) return newVariable(left->m_value_f32 == right->m_value_f32);
+				else if(n->op == binop_notEquals) return newVariable(left->m_value_f32 != right->m_value_f32);
+				else if(n->op == binop_less) return newVariable(left->m_value_f32 < right->m_value_f32);
+				else if(n->op == binop_greater) return newVariable(left->m_value_f32 > right->m_value_f32);
 
 				assert(false);
 				return nullptr;
@@ -668,11 +734,13 @@ int main()
 	const char* const testCode = R"(
 x = 5
 x = x + 5
-if x == 11
+if x != 10 {
 	x = x + 1
-else if x == 10
+} else if x == 10 {
 	x = x - 1
-y = x * (1 + 2)
+	z = 999
+}
+y = x * (1 + 1)
 )";
 
 	Lexer lexer(testCode);
