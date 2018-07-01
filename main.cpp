@@ -352,12 +352,10 @@ struct Parser
 	// A block of statements or a single statement.
 	AstNode* parse_statement()
 	{
-		AstStatementList* const stmntList = new AstStatementList();
-
 		if(m_token->type == tokenType_blockBegin) {
-
 			matchAny();
 
+			AstStatementList* const stmntList = new AstStatementList();
 			while(m_token->type != tokenType_blockEnd) {
 
 				AstNode* node = nullptr;
@@ -374,13 +372,13 @@ struct Parser
 			}
 
 			match(tokenType_blockEnd);
+			return stmntList;
 		} 
 		else if(m_token->type == tokenType_print)
 		{
 			matchAny();
 			AstPrint* const astPrint = new AstPrint(parse_expression());
-			stmntList->m_statements.push_back(astPrint);
-
+			return astPrint;
 		}
 		else if(m_token->type == tokenType_if)
 		{
@@ -394,15 +392,13 @@ struct Parser
 				astIf->falseBranchStatement = parse_statement();
 			}
 
-			stmntList->m_statements.push_back(astIf);
+			return astIf;
 		} else {
-			AstNode* node = parse_expression();
-			if(node) {
-				stmntList->m_statements.push_back(node);
-			}
+			return parse_expression();
 		}
 
-		return stmntList;
+		assert(false);
+		return nullptr;
 	}
 
 	AstNode* parse_programRoot()
