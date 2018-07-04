@@ -1,7 +1,7 @@
 #include <iostream>
+#include <unordered_map>
 #include <string>
 #include <vector>
-#include <unordered_map>
 #include <locale>
 #include <assert.h>
 
@@ -13,6 +13,8 @@ enum TokenType : int
 	tokenType_string,
 
 	// operators.
+	tokenType_memberAccess,
+	tokenType_comma,
 	tokenType_assign, // =
 	tokenType_less, // <
 	tokenType_greater, // >
@@ -118,6 +120,14 @@ struct Lexer
 
 			return token;
 		}
+		else if(*m_ptr == '.') {
+			m_ptr++;
+			return Token(tokenType_memberAccess);
+		}
+		else if(*m_ptr == ',') {
+			m_ptr++;
+			return Token(tokenType_comma);
+		}
 		else if(*m_ptr == '=') {
 			if(m_ptr[1] == '=') {
 				m_ptr+=2;
@@ -214,6 +224,8 @@ enum AstNodeType
 	astNodeType_number,
 	astNodeType_string,
 	astNodeType_identifier,
+	astNodeType_memberAccess,
+	astNodeType_tableMaker,
 	astNodeType_binop,
 	astNodeType_unop,
 	astNodeType_assign,
@@ -262,6 +274,27 @@ struct AstIdentifier : public AstNode
 	{}
 
 	std::string identifier;
+};
+
+struct AstMemberAcess : public AstNode
+{
+	AstMemberAcess(AstNode* const left, const std::string& memberName)
+		: left(left)
+		, memberName(memberName)
+		, AstNode(astNodeType_memberAccess)
+	{}
+
+	AstNode* left = nullptr;
+	std::string memberName;
+};
+
+struct AstTableMaker : public AstNode
+{
+	AstTableMaker()
+		: AstNode(astNodeType_tableMaker)
+	{}
+
+	std::unordered_map<std::string, AstNode*> memberToExpression;
 };
 
 enum BinOp : int
@@ -446,6 +479,31 @@ struct Parser
 		return parse_expression6();
 	}
 
+	AstNode* parse_expression_tableMaker()
+	{
+		match(tokenType_blockBegin);
+
+		AstTableMaker* result = new AstTableMaker();
+
+		while(m_token->type != tokenType_blockEnd)
+		{
+			if(m_token->type == tokenType_identifier)
+			{
+				AstNode*  &memberInitExpr = result->memberToExpression[m_token->strData];
+				matchAny();
+				memberInitExpr = parse_expression();
+			}
+			else
+			{
+				assert(false);
+				return nullptr;
+			}
+		}
+		match(tokenType_blockEnd);
+
+		return result;
+	}
+
 	AstNode* parse_expression0()
 	{
 		if(m_token->type == tokenType_number)
@@ -454,7 +512,7 @@ struct Parser
 			matchAny();
 			return result;
 		}
-		if(m_token->type == tokenType_string)
+		else if(m_token->type == tokenType_string)
 		{
 			AstNode* const result =  new AstString(m_token->strData);
 			matchAny();
@@ -473,9 +531,36 @@ struct Parser
 			match(tokenType_rparen);
 			return result;
 		}
+		else if(m_token->type == tokenType_blockBegin)
+		{
+			return parse_expression_tableMaker();
+		}
 
 		assert(false);
 		return nullptr;
+	}
+
+	AstNode* parse_expressionMeberAccess()
+	{
+		AstNode* const left = parse_expression0();
+
+		if(m_token->type == tokenType_memberAccess)
+		{
+			matchAny();
+			if(m_token->type == tokenType_identifier)
+			{
+				AstNode* const result = new AstMemberAcess(left, m_token->strData);
+				match(tokenType_identifier);
+				return result;
+			}
+			else
+			{
+				assert(false);
+				return nullptr;
+			}
+		}
+		
+		return left;
 	}
 
 	AstNode* parse_expression1()
@@ -493,7 +578,7 @@ struct Parser
 			return result;
 		}
 
-		return parse_expression0();
+		return parse_expressionMeberAccess();
 	}
 
 	AstNode* parse_expression2()
@@ -610,33 +695,62 @@ struct Parser
 enum VarType : int
 {
 	varType_undefined,
+	varType_table,
 	varType_f32,
 	varType_string,
 };
 
 struct Var
 {
-	std::string n_name; // if applicable.
-	VarType m_varType = varType_undefined; // Flags of enum VarFlag
-
-	float m_value_f32 = 0.f;
-	std::string m_value_string;
-
 	Var(VarType const varType)
 		: m_varType(varType)
 	{}
 
 	void makeFloat32(const float value)
 	{
-		m_varType = varType_f32;
+		*this = Var(varType_f32);
 		m_value_f32 = value;
 	}
 
 	void makeString(std::string s)
 	{
-		m_varType = varType_string;
+		*this = Var(varType_string);
 		m_value_string = std::move(s);
 	}
+
+	void makeTable() {
+		*this = Var(varType_table);
+	}
+
+	//std::string m_name; // if applicable.
+	VarType m_varType = varType_undefined; // Flags of enum VarFlag
+
+	float m_value_f32 = 0.f;
+	std::string m_value_string;
+	std::unordered_map<std::string, Var*> m_tableLUT; // member name ot variable LUT
+
+};
+
+
+void printVariable(const Var* const expr)
+{
+	if(expr->m_varType == varType_f32)
+		printf("%f\n", expr->m_value_f32);
+	else if(expr->m_varType == varType_string)
+		printf("%s\n", expr->m_value_string.c_str());
+	else if(expr->m_varType == varType_table)
+	{
+		printf("{ \n");
+		for(auto& pair : expr->m_tableLUT)
+		{
+			printf("%s = ", pair.first.c_str());
+			printVariable(pair.second);
+			
+		}
+		printf(" }\n");
+	}
+	else
+		printf("<undefined>\n");
 };
 
 struct Executor
@@ -644,7 +758,7 @@ struct Executor
 	Var* newVariable(const char* const name, const VarType varType) {
 		Var* const result = new Var(varType);
 		if(name != nullptr) {
-			result->n_name = name;
+			//result->m_name = name;
 			m_variablesLut[name] = result;
 		}
 		return result;
@@ -662,9 +776,14 @@ struct Executor
 		return var;
 	}
 
-	Var* findVariable(const std::string name) {
+	Var* findVariable(const std::string name, bool createUndefinedIfMissing) {
 		auto itr = m_variablesLut.find(name);
 		if(itr == std::end(m_variablesLut)) {
+
+			if(createUndefinedIfMissing) {
+				return newVariable(name.c_str(), varType_undefined);
+			}
+
 			return nullptr;
 		}
 
@@ -686,14 +805,47 @@ struct Executor
 			case astNodeType_identifier:
 			{
 				const AstIdentifier* const n = (AstIdentifier*)root;
-				Var* const result = findVariable(n->identifier);
-
-				if(result == nullptr) {
-					return newVariable(n->identifier.c_str(), varType_undefined);
-				}
+				Var* const result = findVariable(n->identifier, true);
 
 				return result;
 			}break;
+			case astNodeType_memberAccess:
+			{
+				const AstMemberAcess* const n = (AstMemberAcess*)root;
+				Var* const left = evaluate(n->left);
+
+				if(left->m_varType != varType_table) {
+					assert(false);
+					return nullptr;
+				}
+
+				Var* member = nullptr;
+
+				auto itr = left->m_tableLUT.find(n->memberName);
+				if(itr == std::end(left->m_tableLUT))
+				{
+					member = newVariable(nullptr, varType_undefined);
+					left->m_tableLUT[n->memberName] = member;
+				}
+				else
+				{
+					member = itr->second;
+				}
+				
+				assert(member != nullptr);
+				return member;
+			}break;
+			case astNodeType_tableMaker:
+			{
+				const AstTableMaker* const n = (AstTableMaker*)root;
+				Var* result = newVariable(nullptr, varType_table);
+				for(const auto& pair : n->memberToExpression)
+				{
+					result->m_tableLUT[pair.first] = evaluate(pair.second);
+				}
+
+				return result;
+			}
 			case astNodeType_binop:
 			{
 				const AstBinOp* const n = (AstBinOp*)root;
@@ -736,8 +888,7 @@ struct Executor
 				const AstAssign* const n = (AstAssign*)root;
 				Var* const left = evaluate(n->left);
 				const Var* const right = evaluate(n->right);
-				left->m_value_f32 = right->m_value_f32;
-				left->m_varType = right->m_varType;
+				*left = *right;
 				return left;
 			}break;
 			case astNodeType_statementList:
@@ -780,12 +931,7 @@ struct Executor
 				const AstPrint* const n = (AstPrint*)root;
 				const Var* const expr = evaluate(n->expression);
 
-				if(expr->m_varType == varType_f32)
-					printf("%f\n", expr->m_value_f32);
-				else if(expr->m_varType == varType_string)
-					printf("%s\n", expr->m_value_string.c_str());
-				else
-					printf("<undefined>\n");
+				printVariable(expr);
 
 				return nullptr;
 			}break;
@@ -862,6 +1008,12 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
+
+table = {
+	x 1
+	y 2
+}
+
 x = 3 * 2 * 4 * -(3 * 5) == -1
 print x
 x = 1 + (x + 5) * 3 
@@ -914,14 +1066,12 @@ print "Zdrasti!"
 
 	printf("-------------------------------------Variables:\n");
 
+	
+
 	for(auto p : e.m_variablesLut)
 	{
-		if(p.second->m_varType == varType_f32)
-			printf("%s = %f \n", p.first.c_str(), p.second->m_value_f32);
-		else if(p.second->m_varType == varType_string)
-			printf("%s = %s \n", p.first.c_str(), p.second->m_value_string.c_str());
-		else
-			printf("%s = <undefined> \n", p.first.c_str());
+		printf("%s = ", p.first.c_str());
+		printVariable(p.second);
 	}
 
 	system("pause");
