@@ -425,20 +425,10 @@ struct Parser
 			AstPrint* const astPrint = new AstPrint(parse_expression());
 			return astPrint;
 		}
-		else if(m_token->type == tokenType_if)
-		{
-			match(tokenType_if);
-			AstIf* const astIf = new AstIf();
-			astIf->expression = parse_expression();
-			astIf->trueBranchStatement = parse_statement();
-
-			if(m_token->type == tokenType_else) {
-				matchAny();
-				astIf->falseBranchStatement = parse_statement();
-			}
-
-			return astIf;
-		}
+		//else if(m_token->type == tokenType_if)
+		//{
+		//	return parse_if();
+		//}
 		else if(m_token->type == tokenType_while)
 		{
 			match(tokenType_while);
@@ -535,6 +525,10 @@ struct Parser
 		{
 			return parse_expression_tableMaker();
 		}
+		else if(m_token->type == tokenType_if)
+		{
+			return parse_if();
+		}
 
 		assert(false);
 		return nullptr;
@@ -561,6 +555,24 @@ struct Parser
 		}
 		
 		return left;
+	}
+
+	AstNode* parse_if()
+	{
+		if(m_token->type == tokenType_if)
+		{
+			match(tokenType_if);
+			AstIf* const astIf = new AstIf();
+			astIf->expression = parse_expression();
+			astIf->trueBranchStatement = parse_statement();
+
+			if(m_token->type == tokenType_else) {
+				matchAny();
+				astIf->falseBranchStatement = parse_statement();
+			}
+
+			return astIf;
+		}
 	}
 
 	AstNode* parse_expression1()
@@ -663,6 +675,7 @@ struct Parser
 
 	AstNode* parse_expression6()
 	{
+
 		AstNode* left = parse_expression5();
 
 		if(m_token->type == tokenType_assign)
@@ -672,7 +685,7 @@ struct Parser
 			return assign;
 		}
 
-		return left;
+		return left;	
 	}
 
 	void matchAny()
@@ -1016,10 +1029,14 @@ table = {
 
 x = 3 * 2 * 4 * -(3 * 5) == -1
 print x
+x = 0
 x = 1 + (x + 5) * 3 
+print x
 if x != 10 {
+	print "true"
 	x = x + 1
 } else if x == 10 {
+	print "false"
 	x = x - 1
 }
 
@@ -1028,6 +1045,7 @@ while t != 10 {
 	print t
 	t = t + 1
 }
+q = if if t == 0 x else y 66 else 77
 print "Zdrasti!"
 )";
 
