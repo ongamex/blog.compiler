@@ -1,6 +1,7 @@
 #include <iostream>
 #include <unordered_map>
 #include <string>
+#include <sstream>
 #include <vector>
 #include <locale>
 #include <assert.h>
@@ -32,6 +33,7 @@ enum TokenType : int
 	tokenType_blockEnd, // }
 
 	// keywords.
+	tokenType_fn,
 	tokenType_if,
 	tokenType_else,
 	tokenType_while,
@@ -83,7 +85,11 @@ struct Lexer
 				m_ptr++;
 			}
 
-			if(token.strData == "if") {
+			if(token.strData == "fn") {
+				token.type = tokenType_fn;
+				token.strData.clear();
+			}
+			else if(token.strData == "if") {
 				token.type = tokenType_if;
 				token.strData.clear();
 			}
@@ -228,11 +234,13 @@ enum AstNodeType
 	astNodeType_tableMaker,
 	astNodeType_binop,
 	astNodeType_unop,
+	astNodeType_fnCall,
 	astNodeType_assign,
 	astNodeType_statementList,
 	astNodeType_if,
 	astNodeType_while,
 	astNodeType_print,
+	astNodeType_fndecl,
 
 };
 
@@ -297,6 +305,16 @@ struct AstTableMaker : public AstNode
 	std::unordered_map<std::string, AstNode*> memberToExpression;
 };
 
+struct AstFnCall : public AstNode
+{
+	AstFnCall()
+		: AstNode(astNodeType_fnCall)
+	{}
+
+	AstNode* theFunction = nullptr;
+	std::vector<AstNode*> callArgs;
+};
+
 enum BinOp : int
 {
 	binop_add,
@@ -353,8 +371,8 @@ struct AstStatementList : public AstNode
 		AstNode(astNodeType_statementList)
 	{}
 
+	bool needsOwnScope = true; // if specified when executing a new scope will be generated for the statement list.
 	std::vector<AstNode*> m_statements;
-
 };
 
 struct AstIf : public AstNode
@@ -366,6 +384,17 @@ struct AstIf : public AstNode
 	AstNode* expression = nullptr;
 	AstNode* trueBranchStatement = nullptr;
 	AstNode* falseBranchStatement = nullptr;
+};
+
+struct AstFnDecl : public AstNode
+{
+	AstFnDecl() :
+		AstNode(astNodeType_fndecl)
+	{}
+
+	AstNode* fnBodyBlock = nullptr; // THe code of the function.
+	std::vector<std::string> argsNames;
+	int fnIdx = -1;
 };
 
 struct AstWhile : public AstNode
@@ -392,6 +421,12 @@ struct Parser
 {
 	AstNode* root = nullptr;
 	const Token* m_token = nullptr;
+	std::unordered_map<int, AstFnDecl*> m_fnIdx2fn;
+
+	void registerFunction(AstFnDecl* const fnDecl) {
+		fnDecl->fnIdx = m_fnIdx2fn.size();
+		m_fnIdx2fn[m_fnIdx2fn.size()] = fnDecl;
+	}
 
 	void parse()
 	{
@@ -466,7 +501,34 @@ struct Parser
 
 	AstNode* parse_expression()
 	{
-		return parse_expression6();
+		AstNode* left =  parse_expression6();
+
+		// This whole expression could be a function call
+		if(m_token->type == tokenType_lparen) {
+			matchAny();
+
+			AstFnCall* fnCall = new AstFnCall();
+			fnCall->theFunction = left;
+
+			while(m_token->type != tokenType_rparen)
+			{
+				AstNode* const arg = parse_expression();
+				if(arg)
+				{
+					fnCall->callArgs.push_back(arg);
+				}
+				else
+				{
+					assert(false);
+					return nullptr;
+				}
+			}
+			match(tokenType_rparen);
+
+			return fnCall;
+		}
+		
+		return left;
 	}
 
 	AstNode* parse_expression_tableMaker()
@@ -529,6 +591,10 @@ struct Parser
 		{
 			return parse_if();
 		}
+		else if(m_token->type == tokenType_fn)
+		{
+			return parse_fndecl();
+		}
 
 		assert(false);
 		return nullptr;
@@ -573,6 +639,39 @@ struct Parser
 
 			return astIf;
 		}
+
+		return nullptr;
+	}
+
+	AstNode* parse_fndecl()
+	{
+		AstFnDecl* fnDecl = nullptr;
+
+		if(m_token->type == tokenType_fn)
+		{
+			fnDecl = new AstFnDecl();
+			registerFunction(fnDecl);
+
+			match(tokenType_fn);
+
+			match(tokenType_lparen);
+			while(m_token->type == tokenType_identifier) {
+				fnDecl->argsNames.push_back(m_token->strData);
+				match(tokenType_identifier);
+			}
+			match(tokenType_rparen);
+		}
+
+		fnDecl->fnBodyBlock = parse_statement();
+
+		// If this is a block statement list, then force disable the specific scope for it, as we are going to use the scope of the function.
+		if(fnDecl->fnBodyBlock && fnDecl->fnBodyBlock->type == astNodeType_statementList)
+		{
+			AstStatementList* const bodyStatementList = static_cast<AstStatementList*>(fnDecl->fnBodyBlock);
+			bodyStatementList->needsOwnScope = false;
+		}
+
+		return fnDecl;
 	}
 
 	AstNode* parse_expression1()
@@ -711,6 +810,7 @@ enum VarType : int
 	varType_table,
 	varType_f32,
 	varType_string,
+	varType_fn,
 };
 
 struct Var
@@ -731,8 +831,15 @@ struct Var
 		m_value_string = std::move(s);
 	}
 
-	void makeTable() {
+	void makeTable()
+	{
 		*this = Var(varType_table);
+	}
+
+	void makeFunction(int functionIndex)
+	{
+		*this = Var(varType_fn);
+		m_fnIdx = functionIndex;
 	}
 
 	//std::string m_name; // if applicable.
@@ -741,9 +848,8 @@ struct Var
 	float m_value_f32 = 0.f;
 	std::string m_value_string;
 	std::unordered_map<std::string, Var*> m_tableLUT; // member name ot variable LUT
-
+	int m_fnIdx = -1;
 };
-
 
 void printVariable(const Var* const expr)
 {
@@ -751,6 +857,8 @@ void printVariable(const Var* const expr)
 		printf("%f\n", expr->m_value_f32);
 	else if(expr->m_varType == varType_string)
 		printf("%s\n", expr->m_value_string.c_str());
+	else if(expr->m_varType == varType_fn)
+		printf("<function %i>\n", expr->m_fnIdx);
 	else if(expr->m_varType == varType_table)
 	{
 		printf("{ \n");
@@ -766,41 +874,84 @@ void printVariable(const Var* const expr)
 		printf("<undefined>\n");
 };
 
+struct Scope
+{
+	std::string scope;
+};
+
 struct Executor
 {
-	Var* newVariable(const char* const name, const VarType varType) {
+	void pushScope(const AstNode* const node, const char* const postfix)
+	{
+		std::stringstream uniqueIdSS;
+		uniqueIdSS << (size_t)(AstNode*)node;
+		if(postfix) {
+			uniqueIdSS << postfix;
+		}
+
+		std::string fullScope = !m_scopeStack.empty() 
+			? m_scopeStack.back() + " " + uniqueIdSS.str()
+			: uniqueIdSS.str();
+
+		m_scopeStack.emplace_back(std::move(fullScope));
+	}
+
+	void popScope()
+	{
+		assert(m_scopeStack.empty() == false);
+		m_scopeStack.pop_back();
+	}
+
+	Var* newVariableRaw(const char* nameCStr, const VarType varType) {
+		
 		Var* const result = new Var(varType);
-		if(name != nullptr) {
+		
+		if(nameCStr!=nullptr) {
 			//result->m_name = name;
-			m_variablesLut[name] = result;
+			m_variablesLut[nameCStr] = result;
 		}
 		return result;
 	}
 
-	Var* newVariable(float v) {
-		Var* var = newVariable(nullptr, (VarType)0); // HACK
+	Var* newVariableFloat(float v) {
+		Var* var = newVariableRaw(nullptr, (VarType)0); // HACK
 		var->makeFloat32(v);
 		return var;
 	}
 
 	Var* newVariableString(std::string v) {
-		Var* var = newVariable(0);
+		Var* var = newVariableRaw(nullptr, (VarType)0);
 		var->makeString(std::move(v));
 		return var;
 	}
 
-	Var* findVariable(const std::string name, bool createUndefinedIfMissing) {
-		auto itr = m_variablesLut.find(name);
-		if(itr == std::end(m_variablesLut)) {
+	Var* newVariableFunction(int fnIdx) {
+		Var* var = newVariableRaw(nullptr, (VarType)0);
+		var->makeFunction(fnIdx);
+		return var;
+	}
 
-			if(createUndefinedIfMissing) {
-				return newVariable(name.c_str(), varType_undefined);
+	Var* findVariableInScope(const std::string& baseName, bool createUndefinedIfMissing, bool shouldGoUpwardsIfMIssing) {
+
+		for(int t = (int)(m_scopeStack.size()) - 1; t != -1; --t)
+		{
+			std::string name = (t == -1) ? baseName : m_scopeStack[t] + " " + baseName;;
+		
+			auto itr = m_variablesLut.find(name);
+			if(itr == std::end(m_variablesLut)) {
+
+				if(createUndefinedIfMissing) {
+					return newVariableRaw(name.c_str(), varType_undefined);
+				}
+			} else {
+				return itr->second;
 			}
 
-			return nullptr;
+			if(shouldGoUpwardsIfMIssing == false)
+				return nullptr;
 		}
 
-		return itr->second;
+		return nullptr;
 	}
 
 	Var* evaluate(const AstNode* const root)
@@ -809,7 +960,7 @@ struct Executor
 		{
 			case astNodeType_number:
 			{   
-				return newVariable(((AstNumber*)(root))->value);
+				return newVariableFloat(((AstNumber*)(root))->value);
 			}break;
 			case astNodeType_string:
 			{   
@@ -818,8 +969,16 @@ struct Executor
 			case astNodeType_identifier:
 			{
 				const AstIdentifier* const n = (AstIdentifier*)root;
-				Var* const result = findVariable(n->identifier, true);
-
+				Var* result = findVariableInScope(n->identifier, false, true);
+				if(!result) {
+					result = findVariableInScope(n->identifier, true, false);
+				}
+				return result;
+			}break;
+			case astNodeType_fndecl:
+			{
+				const AstFnDecl* const n = (AstFnDecl*)root;
+				Var* const result = newVariableFunction(n->fnIdx);
 				return result;
 			}break;
 			case astNodeType_memberAccess:
@@ -837,7 +996,7 @@ struct Executor
 				auto itr = left->m_tableLUT.find(n->memberName);
 				if(itr == std::end(left->m_tableLUT))
 				{
-					member = newVariable(nullptr, varType_undefined);
+					member = newVariableRaw(nullptr, varType_undefined);
 					left->m_tableLUT[n->memberName] = member;
 				}
 				else
@@ -851,7 +1010,7 @@ struct Executor
 			case astNodeType_tableMaker:
 			{
 				const AstTableMaker* const n = (AstTableMaker*)root;
-				Var* result = newVariable(nullptr, varType_table);
+				Var* result = newVariableRaw(nullptr, varType_table);
 				for(const auto& pair : n->memberToExpression)
 				{
 					result->m_tableLUT[pair.first] = evaluate(pair.second);
@@ -865,20 +1024,32 @@ struct Executor
 				const Var* const left = evaluate(n->left);
 				const Var* const right = evaluate(n->right);
 
-				if(left->m_varType != varType_f32 || right->m_varType != varType_f32) {
-					assert(false);
-					return nullptr;
+				if(left->m_varType == varType_f32 && right->m_varType == varType_f32)
+				{
+					if(n->op == binop_add) return newVariableFloat(left->m_value_f32 + right->m_value_f32);
+					else if(n->op == binop_sub) return newVariableFloat(left->m_value_f32 - right->m_value_f32);
+					else if(n->op == binop_mul) return newVariableFloat(left->m_value_f32 * right->m_value_f32);
+					else if(n->op == binop_div) return newVariableFloat(left->m_value_f32 / right->m_value_f32);
+					else if(n->op == binop_equals) return newVariableFloat(left->m_value_f32 == right->m_value_f32);
+					else if(n->op == binop_notEquals) return newVariableFloat(left->m_value_f32 != right->m_value_f32);
+					else if(n->op == binop_less) return newVariableFloat(left->m_value_f32 < right->m_value_f32);
+					else if(n->op == binop_greater) return newVariableFloat(left->m_value_f32 > right->m_value_f32);
+					
+				}
+				if(left->m_varType == varType_string && n->op == binop_add)
+				{
+					// string + string
+					if(right->m_varType == varType_string) {
+						return newVariableString(left->m_value_string + right->m_value_string);
+					}
+					else if(right->m_varType == varType_f32) {
+						std::stringstream ss;
+						ss << right->m_value_f32;
+						return newVariableString(left->m_value_string + ss.str());
+					}
 				}
 
-				if(n->op == binop_add) return newVariable(left->m_value_f32 + right->m_value_f32);
-				else if(n->op == binop_sub) return newVariable(left->m_value_f32 - right->m_value_f32);
-				else if(n->op == binop_mul) return newVariable(left->m_value_f32 * right->m_value_f32);
-				else if(n->op == binop_div) return newVariable(left->m_value_f32 / right->m_value_f32);
-				else if(n->op == binop_equals) return newVariable(left->m_value_f32 == right->m_value_f32);
-				else if(n->op == binop_notEquals) return newVariable(left->m_value_f32 != right->m_value_f32);
-				else if(n->op == binop_less) return newVariable(left->m_value_f32 < right->m_value_f32);
-				else if(n->op == binop_greater) return newVariable(left->m_value_f32 > right->m_value_f32);
-
+				// Unknown operation.
 				assert(false);
 				return nullptr;
 			}break;
@@ -893,7 +1064,7 @@ struct Executor
 				}
 
 				const float v = n->op == '-' ?  -left->m_value_f32 : left->m_value_f32;
-				return newVariable(v);
+				return newVariableFloat(v);
 
 			}break;
 			case astNodeType_assign:
@@ -904,13 +1075,61 @@ struct Executor
 				*left = *right;
 				return left;
 			}break;
+			case astNodeType_fnCall:
+			{
+				const AstFnCall* const n = (AstFnCall*)root;
+
+				// TODO: deeply incomplete!
+				Var* fn = evaluate(n->theFunction);
+				if(fn && fn->m_varType == varType_fn)
+				{
+					auto itr = parser->m_fnIdx2fn.find(fn->m_fnIdx);
+					if(itr != parser->m_fnIdx2fn.end())
+					{
+						const AstFnDecl* const fnToCallDecl = (AstFnDecl*)itr->second;
+						pushScope(fnToCallDecl, nullptr);
+
+						// Set the arguments
+						if(fnToCallDecl->argsNames.size() == n->callArgs.size())
+						{
+							for(int iArg = 0; iArg < n->callArgs.size(); ++iArg)
+							{
+								Var* const arg = findVariableInScope(fnToCallDecl->argsNames[iArg], true, false);
+								*arg = *evaluate(n->callArgs[iArg]);
+							}
+						}
+						else
+						{
+							assert(false);
+							popScope();
+							return nullptr;
+						}
+
+						Var* result = evaluate(fnToCallDecl->fnBodyBlock);
+						popScope();
+						return result;
+					}
+				}
+
+				assert(false);
+				return nullptr;
+			}break;
 			case astNodeType_statementList:
 			{
 				const AstStatementList* const n = (AstStatementList*)root;
-				for(AstNode* node : n->m_statements)
-				{
+
+				if(n->needsOwnScope) {
+					pushScope(n, nullptr);
+				}
+
+				for(AstNode* node : n->m_statements) {
 					evaluate(node);
 				}
+
+				if(n->needsOwnScope) {
+					popScope();
+				}
+
 				return nullptr;
 			}break;
 			case astNodeType_if:
@@ -919,10 +1138,16 @@ struct Executor
 				const Var* const expr = evaluate(n->expression);
 
 				if(expr->m_value_f32 != 0.f) {
-					return evaluate(n->trueBranchStatement);
+					pushScope(n, "true");
+					Var* const expr = evaluate(n->trueBranchStatement);
+					popScope();
+					return expr;
 				}
 				else if(n->falseBranchStatement) {
-					return evaluate(n->falseBranchStatement);
+					pushScope(n, "false");
+					Var* const expr = evaluate(n->falseBranchStatement);
+					popScope();
+					return expr;
 				}
 
 				return nullptr;
@@ -932,10 +1157,12 @@ struct Executor
 				const AstWhile* const n = (AstWhile*)root;
 				const Var* expr = evaluate(n->expression);
 
+				pushScope(n, nullptr);
 				while(expr->m_value_f32 != 0.f) {
 					evaluate(n->trueBranchStatement);
 					expr = evaluate(n->expression);
 				}
+				popScope();
 	
 				return nullptr;
 			}break;
@@ -956,8 +1183,10 @@ struct Executor
 
 public :
 
+	Parser* parser = nullptr;
 	std::unordered_map<std::string, Var*> m_variablesLut;
 	std::vector<Var*> m_allocatedVariables;
+	std::vector<std::string> m_scopeStack;
 };
 
 void printNode(const AstNode* const n, const int tab)
@@ -1021,11 +1250,19 @@ void printNode(const AstNode* const n, const int tab)
 int main()
 {
 	const char* const testCode = R"(
-
+(fn() print "Dummy Called") ()
+foo = fn(f) print "foo called with arg f = " + f
 table = {
 	x 1
 	y 2
 }
+
+foo = fn(f) print "foo called with arg f = " + f
+f = 1
+print "f="+f
+foo(123)
+print "f="+f
+
 
 x = 3 * 2 * 4 * -(3 * 5) == -1
 print x
@@ -1042,8 +1279,7 @@ if x != 10 {
 
 t = 0
 while t != 10 {
-	print t
-	t = t + 1
+	print "t = " + (t = t + 1)
 }
 q = if if t == 0 x else y 66 else 77
 print "Zdrasti!"
@@ -1080,6 +1316,7 @@ print "Zdrasti!"
 
 	printf("-------------------------------------Execution:\n");
 	Executor e;
+	e.parser = &p;
 	e.evaluate(root);
 
 	printf("-------------------------------------Variables:\n");
