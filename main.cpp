@@ -93,8 +93,14 @@ enum TokenType : int
 	tokenType_if,
 	tokenType_else,
 	tokenType_while,
-	tokenType_print,
 	tokenType_return,
+	// keywords but functions
+	tokenType_print,
+	tokenType_arr_sz,
+	tokenType_arr_push_back,
+	tokenType_arr_push_at,
+	tokenType_arr_pop_back,
+	tokenType_arr_pop_at,
 };
 
 struct Location
@@ -630,14 +636,14 @@ struct Parser
 		if(m_token->type == tokenType_print)
 		{
 			match(tokenType_print);
-			AstPrint* const astPrint = new AstPrint(parse_expression(true));
+			AstPrint* const astPrint = new AstPrint(parse_expression());
 			match(tokenType_semicolon);
 			return astPrint;
 		}
 		else if(m_token->type == tokenType_if)
 		{
 			// Add if as a statement so we don't have to add a semicolon after it, when we don't use it in an expression.
-			AstNode* ifNode = parse_expression_if(true);
+			AstNode* ifNode = parse_expression_if();
 
 			if(ifNode == nullptr) {
 				reportError(m_token->location, "failed to parse if expression");
@@ -649,7 +655,7 @@ struct Parser
 		{
 			match(tokenType_while);
 			AstWhile* const astWhile = new AstWhile();
-			astWhile->expression = parse_expression(true);
+			astWhile->expression = parse_expression();
 			astWhile->trueBranchStatement = parse_statement_block();
 
 			return astWhile;
@@ -660,14 +666,14 @@ struct Parser
 			AstReturn* const astReturn = new AstReturn;
 
 			if(m_token->type != tokenType_semicolon) {
-				astReturn->expression = parse_expression(true);
+				astReturn->expression = parse_expression();
 			}
 
 			match(tokenType_semicolon);
 			return astReturn;
 		}
 		else {
-			AstNode* expr = parse_expression(true);
+			AstNode* expr = parse_expression();
 			match(tokenType_semicolon);
 			return expr;
 		}
@@ -694,9 +700,9 @@ struct Parser
 		return progRoot;
 	}
 
-	AstNode* parse_expression(bool const reportErrorOnFail)
+	AstNode* parse_expression()
 	{
-		AstNode* left = parse_expression6(reportErrorOnFail);
+		AstNode* left = parse_expression6();
 
 		// This whole expression could be a function call
 		if(m_token->type == tokenType_lparen) {
@@ -707,7 +713,7 @@ struct Parser
 
 			while(m_token->type != tokenType_rparen)
 			{
-				AstNode* const arg = parse_expression(true);
+				AstNode* const arg = parse_expression();
 				if(arg)
 				{
 					fnCall->callArgs.push_back(arg);
@@ -729,7 +735,7 @@ struct Parser
 
 			AstArrayIndexing* arrayIndexing = new AstArrayIndexing();
 			arrayIndexing->theArray = left;
-			arrayIndexing->index = parse_expression(true);
+			arrayIndexing->index = parse_expression();
 
 			match(tokenType_rsqBracket);
 		}
@@ -737,9 +743,9 @@ struct Parser
 		return left;
 	}
 
-	AstNode* parse_expressionMeberAccess(bool const reportErrorOnFail)
+	AstNode* parse_expressionMeberAccess()
 	{
-		AstNode* const left = parse_expression0(reportErrorOnFail);
+		AstNode* const left = parse_expression0();
 
 		if(m_token->type == tokenType_memberAccess)
 		{
@@ -761,14 +767,14 @@ struct Parser
 		return left;
 	}
 
-	AstNode* parse_expression_if(bool const reportErrorOnFail)
+	AstNode* parse_expression_if()
 	{
 		if(m_token->type == tokenType_if)
 		{
 			match(tokenType_if);
 			AstIf* const astIf = new AstIf();
-			astIf->expression = parse_expression(reportErrorOnFail);
-			if(reportErrorOnFail && astIf->expression == nullptr) {
+			astIf->expression = parse_expression();
+			if(astIf->expression == nullptr) {
 				reportError(m_token->location, "Failed to parse if condition expression");
 			}
 
@@ -782,14 +788,12 @@ struct Parser
 			return astIf;
 		}
 
-		if(reportErrorOnFail) {
-			reportError(m_token->location, "Expected if token");
-		}
+		reportError(m_token->location, "Expected if token");
 
 		return nullptr;
 	}
 
-	AstNode* parse_expression_fndecl(bool const reportErrorOnFail)
+	AstNode* parse_expression_fndecl()
 	{
 		AstFnDecl* fnDecl = nullptr;
 
@@ -821,7 +825,7 @@ struct Parser
 		return fnDecl;
 	}
 
-	AstNode* parse_expression_tableMaker(bool const reportErrorOnFail)
+	AstNode* parse_expression_tableMaker()
 	{
 		match(tokenType_blockBegin);
 		AstTableMaker* const result = new AstTableMaker();
@@ -833,17 +837,15 @@ struct Parser
 				AstNode*& memberInitExpr = result->memberToExpression[m_token->strData];
 				match(tokenType_identifier);
 				match(tokenType_assign);
-				memberInitExpr = parse_expression(reportErrorOnFail);
+				memberInitExpr = parse_expression();
 
 				if(!memberInitExpr) {
 					return nullptr;
-				}
+				}	
 
 				match(tokenType_semicolon);
 			} else {
-				if(reportErrorOnFail) {
-					reportError(m_token->location, "Expected an identifier for member initialization when creating a table");
-				}
+				reportError(m_token->location, "Expected an identifier for member initialization when creating a table");
 				return nullptr;
 			}
 
@@ -856,14 +858,14 @@ struct Parser
 		return result;
 	}
 
-	AstNode* parse_expression_arrayMaker(bool const reportErrorOnFail)
+	AstNode* parse_expression_arrayMaker()
 	{
 		match(tokenType_lsqBracket);
 
 		AstArrayMaker* result = new AstArrayMaker();
 
 		while(m_token->type != tokenType_rsqBracket) {
-			result->arrayElements.push_back(parse_expression(reportErrorOnFail));
+			result->arrayElements.push_back(parse_expression());
 
 			if(m_token->type == tokenType_comma) {
 				match(tokenType_comma);
@@ -879,7 +881,7 @@ struct Parser
 		return result;
 	}
 
-	AstNode* parse_expression0(bool const reportErrorOnFail)
+	AstNode* parse_expression0()
 	{
 		if(m_token->type == tokenType_number)
 		{
@@ -902,26 +904,26 @@ struct Parser
 		else if(m_token->type == tokenType_lparen)
 		{
 			matchAny();
-			AstNode* const result =  parse_expression(reportErrorOnFail);
+			AstNode* const result =  parse_expression();
 			match(tokenType_rparen);
 			return result;
 		}
 		else if(m_token->type == tokenType_blockBegin)
 		{
-			AstNode* tableMaker = parse_expression_tableMaker(reportErrorOnFail);
+			AstNode* tableMaker = parse_expression_tableMaker();
 			return tableMaker;
 		}
 		else if(m_token->type == tokenType_lsqBracket)
 		{
-			return parse_expression_arrayMaker(reportErrorOnFail);
+			return parse_expression_arrayMaker();
 		}
 		else if(m_token->type == tokenType_if)
 		{
-			return parse_expression_if(reportErrorOnFail);
+			return parse_expression_if();
 		}
 		else if(m_token->type == tokenType_fn)
 		{
-			return parse_expression_fndecl(reportErrorOnFail);
+			return parse_expression_fndecl();
 		}
 		
 		//
@@ -929,113 +931,113 @@ struct Parser
 		return nullptr;
 	}
 
-	AstNode* parse_expression1(bool const reportErrorOnFail)
+	AstNode* parse_expression1()
 	{
 		if(m_token->type == tokenType_minus)
 		{
 			matchAny();
-			AstUnOp* const result =  new AstUnOp('-', parse_expression(reportErrorOnFail));
+			AstUnOp* const result =  new AstUnOp('-', parse_expression());
 			return result;
 		}
 		else if(m_token->type == tokenType_plus)
 		{
 			matchAny();
-			AstUnOp* const result =  new AstUnOp('+', parse_expression(reportErrorOnFail));
+			AstUnOp* const result =  new AstUnOp('+', parse_expression());
 			return result;
 		}
 
-		return parse_expressionMeberAccess(reportErrorOnFail);
+		return parse_expressionMeberAccess();
 	}
 
-	AstNode* parse_expression2(bool const reportErrorOnFail)
+	AstNode* parse_expression2()
 	{
-		AstNode* left = parse_expression1(reportErrorOnFail);
+		AstNode* left = parse_expression1();
 
 		if(m_token->type == tokenType_asterisk)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression2(reportErrorOnFail));
+			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression2());
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp(binop_div, left, parse_expression2(reportErrorOnFail));
+			AstNode* retval = new AstBinOp(binop_div, left, parse_expression2());
 			return retval;
 		}
 
 		return left;
 	}
 
-	AstNode* parse_expression3(bool const reportErrorOnFail)
+	AstNode* parse_expression3()
 	{
-		AstNode* left = parse_expression2(reportErrorOnFail);
+		AstNode* left = parse_expression2();
 
 		if(m_token->type == tokenType_plus)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp(binop_add, left, parse_expression(reportErrorOnFail));
+			AstNode* retval = new AstBinOp(binop_add, left, parse_expression());
 			return retval;
 		}
 		else if(m_token->type == tokenType_minus)
 		{
 			matchAny();
-			AstNode* retval = new AstBinOp(binop_sub, left, parse_expression(reportErrorOnFail));
+			AstNode* retval = new AstBinOp(binop_sub, left, parse_expression());
 			return retval;
 		}
 
 		return left;
 	}
 
-	AstNode* parse_expression4(bool const reportErrorOnFail)
+	AstNode* parse_expression4()
 	{
-		AstNode* left = parse_expression3(reportErrorOnFail);
+		AstNode* left = parse_expression3();
 
 		if(m_token->type == tokenType_equals)
 		{
 			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_equals, left, parse_expression(reportErrorOnFail));
+			AstBinOp* equals = new AstBinOp(binop_equals, left, parse_expression());
 			return equals;
 		} 
 		else if(m_token->type == tokenType_notEquals)
 		{
 			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_notEquals, left, parse_expression(reportErrorOnFail));
+			AstBinOp* equals = new AstBinOp(binop_notEquals, left, parse_expression());
 			return equals;
 		}
 
 		return left;
 	}
 
-	AstNode* parse_expression5(bool const reportErrorOnFail)
+	AstNode* parse_expression5()
 	{
-		AstNode* left = parse_expression4(reportErrorOnFail);
+		AstNode* left = parse_expression4();
 
 		if(m_token->type == tokenType_less)
 		{
 			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_less, left, parse_expression(reportErrorOnFail));
+			AstBinOp* equals = new AstBinOp(binop_less, left, parse_expression());
 			return equals;
 		}
 		else if(m_token->type == tokenType_greater)
 		{
 			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_greater, left, parse_expression(reportErrorOnFail));
+			AstBinOp* equals = new AstBinOp(binop_greater, left, parse_expression());
 			return equals;
 		}
 
 		return left;
 	}
 
-	AstNode* parse_expression6(bool const reportErrorOnFail)
+	AstNode* parse_expression6()
 	{
 
-		AstNode* left = parse_expression5(reportErrorOnFail);
+		AstNode* left = parse_expression5();
 
 		if(m_token->type == tokenType_assign)
 		{
 			matchAny();
-			AstAssign* assign = new AstAssign(left, parse_expression(reportErrorOnFail));
+			AstAssign* assign = new AstAssign(left, parse_expression());
 			return assign;
 		}
 
@@ -1526,90 +1528,32 @@ public :
 	std::unordered_map<std::string, Var*> m_variablesLut;
 	std::vector<Var*> m_allocatedVariables;
 	std::vector<std::string> m_scopeStack;
-};
+}; 
 
-int main()
+int main(int argc, const char* argv[])
 {
-	const char* const testCode = R"(
-(fn() { print "Dummy Called"; })();
 
-{
-	lame = (fn(){})();
-	print lame;
-}
-
-boo = fn(x) {
-	if x == 0 {
-		return "gogo";
+	if(argc <= 1) {
+		return 0;
 	}
-	else {
-		return "hoho";
+
+	std::vector<char> fileContents;
+	{
+		FILE* f = fopen(argv[1], "rb");
+		if (f != nullptr) {
+			fseek(f, 0, SEEK_END);
+			const size_t fsize = ftell(f);
+			fseek(f, 0, SEEK_SET);
+			fileContents.resize(fsize);
+			fread(fileContents.data(), 1, fsize, f);
+			fclose(f);
+
+			fileContents.push_back('\0');
+		}
 	}
-	print "never print";
-	return "never";
-};
-
-print boo(0);
-print boo(1);
 
 
-a = b = c = 10;
-print (5 + 4);
-
-foo = fn(f) {
-	print "foo called with arg f = " + f;
-};
-
-
-table = {
-	x = 1;
-	y = 2;
-};
-
-
-
-ttt = { x = 10; };
-inc_x = fn(tbl) {
-	tbl.x = tbl.x + 1;
-};
-
-print "ttt.x = " + ttt.x; inc_x(ttt);
-print "ttt.x = " + ttt.x; inc_x(ttt);
-print "ttt.x = " + ttt.x; inc_x(ttt);
-
-print 10;
-
-foo = fn(f) {
-	print "foo called with arg f = " + f;
-};
-
-f = 1;
-print "f="+f;
-foo(123);
-print "f="+f;
-
-
-x = 3 * 2 * 4 * -(3 * 5) == -1;
-print x;
-x = 0;
-x = 1 + (x + 5) * 3 ;
-print x;
-if x != 10 {
-	print "true";
-	x = x + 1;
-} else if x == 10 {
-	print "false";
-	x = x - 1;
-}
-
-t = 0;
-while t != 10 {
-	print "t = " + (t = t + 1);
-}
-print "Zdrasti!";
-)";
-
-	Lexer lexer(testCode);
+	Lexer lexer(fileContents.data());
 	std ::vector<Token> tokens;
 
 	while(true) {
@@ -1627,13 +1571,10 @@ print "Zdrasti!";
 	p.parse();
 	AstNode* root = p.root;
 
-	printf("-------------------------------------Execution:\n");
 	Executor e;
 	e.parser = &p;
 	Executor::EvalCtx ctx;
 	e.evaluate(root, ctx);
-
-	printf("-------------------------------------Variables:\n");
 
 	for(auto p : e.m_variablesLut) {
 		printf("%s = ", p.first.c_str());
