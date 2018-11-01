@@ -94,13 +94,8 @@ enum TokenType : int
 	tokenType_else,
 	tokenType_while,
 	tokenType_return,
-	// keywords but functions
 	tokenType_print,
-	tokenType_arr_sz,
-	tokenType_arr_push_back,
-	tokenType_arr_push_at,
-	tokenType_arr_pop_back,
-	tokenType_arr_pop_at,
+	tokenType_array,
 };
 
 struct Location
@@ -190,6 +185,10 @@ struct Lexer
 			} 
 			else if(token.strData == "while") {
 				token.type = tokenType_while;
+				token.strData.clear();
+			}
+			else if(token.strData == "array") {
+				token.type = tokenType_array;
 				token.strData.clear();
 			}
 			else {
@@ -341,6 +340,7 @@ enum AstNodeType {
 	astNodeType_binop,
 	astNodeType_unop,
 	astNodeType_fnCall,
+	astNodeType_builtInFnCall,
 	astNodeType_arrayIndexing,
 	astNodeType_assign,
 	astNodeType_statementList,
@@ -738,6 +738,8 @@ struct Parser
 			arrayIndexing->index = parse_expression();
 
 			match(tokenType_rsqBracket);
+
+			return arrayIndexing;
 		}
 		
 		return left;
@@ -860,17 +862,18 @@ struct Parser
 
 	AstNode* parse_expression_arrayMaker()
 	{
-		match(tokenType_lsqBracket);
+		match(tokenType_array);
+		match(tokenType_blockBegin);
 
 		AstArrayMaker* result = new AstArrayMaker();
 
-		while(m_token->type != tokenType_rsqBracket) {
+		while(m_token->type != tokenType_blockEnd) {
 			result->arrayElements.push_back(parse_expression());
 
 			if(m_token->type == tokenType_comma) {
 				match(tokenType_comma);
-			} if(m_token->type == tokenType_rsqBracket) {
-				match(tokenType_rsqBracket);
+			} else if(m_token->type == tokenType_blockEnd) {
+				match(tokenType_blockEnd);
 				break;
 			} else {
 				reportError(m_token->location, "Expected }");
@@ -913,7 +916,7 @@ struct Parser
 			AstNode* tableMaker = parse_expression_tableMaker();
 			return tableMaker;
 		}
-		else if(m_token->type == tokenType_lsqBracket)
+		else if(m_token->type == tokenType_array)
 		{
 			return parse_expression_arrayMaker();
 		}
@@ -1069,7 +1072,12 @@ enum VarType : int
 	varType_f32,
 	varType_string,
 	varType_fn,
+	varType_fnNative, // A C++ function basically.
 };
+
+struct Var;
+struct Executor;
+typedef int (*NativeFnPtr)(int argc, Var* argv[], Executor* exec, Var** ppResultVariable);
 
 struct Var
 {
@@ -1080,7 +1088,7 @@ struct Var
 			m_tableLUT = std::make_shared<std::unordered_map<std::string, Var*>>();
 		}
 
-		if(varType == varType_table) {
+		if(varType == varType_array) {
 			m_arrayValues = std::make_shared<std::vector<Var*>>();
 		}
 	}
@@ -1113,12 +1121,18 @@ struct Var
 		m_fnIdx = functionIndex;
 	}
 
+	void makeNativeFunction(NativeFnPtr const nativeFn) {
+		*this = Var(varType_fnNative);
+		m_fnNative = nativeFn;
+	}
+
 public :
 
 	VarType m_varType = varType_undefined; // Flags of enum VarFlag
 
 	float m_value_f32 = 0.f;
 	int m_fnIdx = -1;
+	NativeFnPtr m_fnNative = nullptr;
 	std::string m_value_string;
 	std::shared_ptr<std::unordered_map<std::string, Var*>> m_tableLUT; // member name ot variable
 	std::shared_ptr<std::vector<Var*>> m_arrayValues; // member name ot variable
@@ -1165,6 +1179,11 @@ struct Scope
 
 struct Executor
 {
+	Executor()
+	{
+		addStnadardLibFunctions();
+	}
+
 	void pushScope(const AstNode* const node, const char* const postfix)
 	{
 		std::stringstream uniqueIdSS;
@@ -1212,6 +1231,12 @@ struct Executor
 	Var* newVariableFunction(int fnIdx) {
 		Var* var = newVariableRaw(nullptr, (VarType)0);
 		var->makeFunction(fnIdx);
+		return var;
+	}
+
+	Var* newVariableNativeFunction(const char* name, NativeFnPtr fnPtr) {
+		Var* var = newVariableRaw(name, (VarType)0);
+		var->makeNativeFunction(fnPtr);
 		return var;
 	}
 
@@ -1340,6 +1365,10 @@ struct Executor
 					else if(n->op == binop_greater) return newVariableFloat(left->m_value_f32 > right->m_value_f32);
 					
 				}
+				if(left->m_varType == varType_f32 && right->m_varType == varType_f32)
+				{
+
+				}
 				if(left->m_varType == varType_string && n->op == binop_add)
 				{
 					// string + string
@@ -1421,6 +1450,28 @@ struct Executor
 						return result;
 					}
 				}
+				else if(fn && fn->m_varType == varType_fnNative)
+				{
+					if(fn->m_fnNative != nullptr)
+					{
+						// Evaluate argument values.
+						std::vector<Var*> arguments;
+						arguments.reserve(n->callArgs.size());
+						for(AstNode* argExpression : n->callArgs){
+							arguments.push_back( evaluate(argExpression, ctx) );
+						}
+
+						// Perform the function call itself.
+						Var* result = nullptr;
+						if(fn->m_fnNative(arguments.size(), arguments.data(), this, &result)) {
+							return result;
+						} else {
+							assert(false);
+							return nullptr;
+						}
+					}
+				}
+				
 
 				assert(false);
 				return nullptr;
@@ -1522,6 +1573,29 @@ struct Executor
 		return nullptr;
 	}
 
+private :
+
+	void addStnadardLibFunctions() {
+
+		NativeFnPtr const array_size = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+			if(argc != 1 || argv[0] == nullptr|| argv[0]->m_varType != varType_array) {
+				return 0;
+			}
+
+			float fSize = 0.f;
+			if(argv[0]->m_arrayValues) {
+				fSize = argv[0]->m_arrayValues->size();
+			}else{
+				assert(false); // Should never happen.
+			}
+
+			*ppResultVariable = exec->newVariableFloat(fSize);
+			return 1;
+		};
+
+		newVariableNativeFunction("array_size", array_size);
+	}
+	
 public :
 
 	Parser* parser = nullptr;
