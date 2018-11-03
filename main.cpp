@@ -1365,10 +1365,6 @@ struct Executor
 					else if(n->op == binop_greater) return newVariableFloat(left->m_value_f32 > right->m_value_f32);
 					
 				}
-				if(left->m_varType == varType_f32 && right->m_varType == varType_f32)
-				{
-
-				}
 				if(left->m_varType == varType_string && n->op == binop_add)
 				{
 					// string + string
@@ -1379,6 +1375,19 @@ struct Executor
 						std::stringstream ss;
 						ss << right->m_value_f32;
 						return newVariableString(left->m_value_string + ss.str());
+					}
+				}
+				else if(right->m_varType == varType_string && n->op == binop_add)
+				{
+					// string + string
+					if(left->m_varType == varType_string) {
+						return newVariableString(left->m_value_string + right->m_value_string);
+					}
+					else if(left->m_varType == varType_f32) {
+						std::stringstream ss;
+						ss << left->m_value_f32;
+						std::string reult = ss.str() + right->m_value_string;
+						return newVariableString(reult);
 					}
 				}
 
