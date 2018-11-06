@@ -9,56 +9,9 @@
 
 #include <cstdarg>
 
-// The caller is EXPECTED to call va_end on the va_list args
-inline void string_format(std::string& retval, const char* const fmt_str, va_list args) {
-
-	// [CAUTION]
-	// Under Windows with msvc it is fine to call va_start once and then use the va_list multiple times.
-	// However this is not the case on the other plafroms. The POSIX docs state that the va_list is undefined
-	// after calling vsnprintf with it:
-	//
-	// From https://linux.die.net/man/3/vsprintf :
-	// The functions vprintf(), vfprintf(), vsprintf(), vsnprintf() are equivalent to the functions 
-	// printf(), fprintf(), sprintf(), snprintf(), respectively, 
-	// except that they are called with a va_list instead of a variable number of arguments. 
-	// These functions do not call the va_end macro. Because they invoke the va_arg macro, 
-	// the value of ap is undefined after the call. See stdarg(3). 
-	// Obtain the length of the result string.
-	va_list args_copy;
-	va_copy(args_copy, args);
-
-	const size_t ln = snprintf(nullptr, 0, fmt_str, args);
-
-	// [CAUTION] Write the data do the result. Allocate one more element 
-	// as the *sprintf function add the '\0' always. Later we will pop that element.
-	retval.resize(ln + 1, 'a');
-
-	snprintf(&retval[0], retval.size()+1, fmt_str, args_copy);
-	retval.pop_back(); // remove the '\0' that was added by snprintf on the back.
-	va_end(args_copy);
-}
-
-inline void string_format(std::string& retval, const char* const fmt_str, ...)
-{
-	va_list args;
-	va_start(args, fmt_str);
-	string_format(retval, fmt_str, args);
-	va_end(args);
-}
-
-
-inline std::string string_format(const char* const fmt_str, ...)
-{
-	std::string retval;
-
-	va_list args;
-	va_start(args, fmt_str);
-	string_format(retval, fmt_str, args);
-	va_end(args);
-
-	return retval;
-}
-
+// Identifies the type of the token (also know as lexeme) matched by the lexer.
+// Some tokens store additional data with the token, like a float for number or
+// a string for string literals and identifiers.
 enum TokenType : int
 {
 	tokenType_none,
@@ -67,7 +20,7 @@ enum TokenType : int
 	tokenType_string,
 
 	// operators.
-	tokenType_memberAccess,
+	tokenType_dot,
 	tokenType_comma,
 	tokenType_assign, // =
 	tokenType_less, // <
@@ -93,17 +46,25 @@ enum TokenType : int
 	tokenType_if,
 	tokenType_else,
 	tokenType_while,
+	tokenType_for,
 	tokenType_return,
 	tokenType_print,
 	tokenType_array,
 };
 
+// A location in our source code used primerly for error reporting.
 struct Location
 {
 	int column = -1;
 	int line = -1;
 };
 
+// A token (also known as lexeme) matched by the lexter.
+// Tokens are basically the building blocks of the language.
+// Example token types:
+// keywords like: if/else/while
+// special symbols like: < > = != == . , () [] ;
+// identifiers, number and string literals
 struct Token
 {
 	Token() = default;
@@ -113,11 +74,12 @@ struct Token
 	{}
 
 	TokenType type = tokenType_none;
-	float numberData;
-	std::string strData;
-	Location location;
+	float numberData; // The number asociated with this token (if any).
+	std::string strData; // The string asociated with this token (if any). Example usage is with identifiers or string literals.
+	Location location; // The location of the token in the source file.
 };
 
+// The lexer takes the input text, and converts it to a linear set of tokens(also know as lexemes).
 struct Lexer
 {
 	int column = 0;
@@ -163,6 +125,7 @@ struct Lexer
 				eatChar();
 			}
 
+			// Check if this is not an identifier but a keyword.
 			if(token.strData == "fn") {
 				token.type = tokenType_fn;
 				token.strData.clear();
@@ -187,7 +150,10 @@ struct Lexer
 				token.type = tokenType_while;
 				token.strData.clear();
 			}
-			else if(token.strData == "array") {
+			else if(token.strData == "for") {
+				token.type = tokenType_for;
+				token.strData.clear();
+			}else if(token.strData == "array") {
 				token.type = tokenType_array;
 				token.strData.clear();
 			}
@@ -221,7 +187,7 @@ struct Lexer
 		}
 		else if(*m_ptr == '.') {
 			eatChar();
-			return Token(tokenType_memberAccess, column, line);
+			return Token(tokenType_dot, column, line);
 		}
 		else if(*m_ptr == ',') {
 			eatChar();
@@ -346,12 +312,17 @@ enum AstNodeType {
 	astNodeType_statementList,
 	astNodeType_if,
 	astNodeType_while,
+	astNodeType_for,
 	astNodeType_print,
 	astNodeType_return,
 	astNodeType_fndecl,
 
 };
 
+// AstNode is the base class for our nodes in our Abstract Syntax Tree (AST for short).
+// Each node represents a basic operation like:
+// addition, substraction, multiplication, assign and many more- All these combined in some way form an expression.
+// statements - expression, if, while, return, block of statements and so on.
 struct AstNode
 {
 	AstNode(AstNodeType const type = astNodeType_invalid) :
@@ -363,6 +334,7 @@ struct AstNode
 	AstNodeType type;
 };
 
+// AstNode representing a single number literal (basically AstNode representation of the matched token by the lexer).
 struct AstNumber : public AstNode
 {
 	AstNumber(float const value = NAN) 
@@ -373,6 +345,7 @@ struct AstNumber : public AstNode
 	float value = NAN;
 };
 
+// AstNode representing a single string literal (basically AstNode representation of the matched token by the lexer).
 struct AstString : public AstNode
 {
 	AstString(std::string s) 
@@ -383,6 +356,7 @@ struct AstString : public AstNode
 	std::string value;
 };
 
+// AstNode representing a single identifer (basically AstNode representation of the matched token by the lexer).
 struct AstIdentifier : public AstNode
 {
 	AstIdentifier(std::string identifier) 
@@ -393,6 +367,8 @@ struct AstIdentifier : public AstNode
 	std::string identifier;
 };
 
+// AstNode representing the operation of acessing a member variable in a table(known as dictionaly or map in some languages).
+// Exmple: <expression>.<member> like point.x
 struct AstMemberAcess : public AstNode
 {
 	AstMemberAcess(AstNode* const left, const std::string& memberName)
@@ -405,6 +381,8 @@ struct AstMemberAcess : public AstNode
 	std::string memberName;
 };
 
+// AstNode representing a set of nodes used to create a table.
+// Example: { x = 5; y = 10; }
 struct AstTableMaker : public AstNode
 {
 	AstTableMaker()
@@ -414,6 +392,8 @@ struct AstTableMaker : public AstNode
 	std::unordered_map<std::string, AstNode*> memberToExpression;
 };
 
+// AstNode representing a set of nodes used to create an array.
+// Example: array{ 5, 10, 15, 20 }
 struct AstArrayMaker : public AstNode
 {
 	AstArrayMaker()
@@ -423,25 +403,30 @@ struct AstArrayMaker : public AstNode
 	std::vector<AstNode*> arrayElements;
 };
 
-
+// AstNode representing a function call.
+// The function is obtained by evaluating the expresion on the left of the '('
+// everything else, until the matching ')' is concidered a function argument.
 struct AstFnCall : public AstNode
 {
 	AstFnCall()
 		: AstNode(astNodeType_fnCall)
 	{}
 
-	AstNode* theFunction = nullptr;
-	std::vector<AstNode*> callArgs;
+	AstNode* theFunction = nullptr; // The node that we are going to evaluate to obtain the function that we're going to call.
+	std::vector<AstNode*> callArgs; // The node that we are going to evalute in order to pass the parameters to the function.
 };
 
+// AstNode representing an array indexing.
+// The array is obtained by evaluating the expresion on the left of the '['
+// everything else, until the matching ']' is going to be used as index.
 struct AstArrayIndexing : public AstNode
 {
 	AstArrayIndexing()
 		: AstNode(astNodeType_arrayIndexing)
 	{}
 
-	AstNode* theArray = nullptr;
-	AstNode* index = nullptr;
+	AstNode* theArray = nullptr; // The node that we are going to evaluate to obtain the array variable.
+	AstNode* index = nullptr; // The node that we are going to evaluate to obtain the index.
 };
 
 enum BinOp : int
@@ -536,6 +521,18 @@ struct AstWhile : public AstNode
 	AstNode* trueBranchStatement = nullptr;
 };
 
+struct AstFor : public AstNode
+{
+	AstFor() :
+		AstNode(astNodeType_for)
+	{}
+
+	AstNode* initExpression = nullptr;
+	AstNode* expression = nullptr;
+	AstNode* postIterationExpression = nullptr;
+	AstNode* trueBranchStatement = nullptr;
+};
+
 struct AstPrint : public AstNode
 {
 	AstPrint(AstNode* expression) :
@@ -581,10 +578,9 @@ struct Parser
 	void reportError(const Location& loc, const char* const fmt, ...) {
 		va_list args;
 		va_start(args, fmt);
-		std::string msg;
-		string_format(msg, fmt, args);
+		char msg[1024] = { 0 };
+		snprintf(msg, sizeof(msg), fmt, args);
 		va_end(args);
-
 		reportError({loc, msg});
 	}
 
@@ -660,6 +656,24 @@ struct Parser
 
 			return astWhile;
 		}
+		else if(m_token->type == tokenType_for)
+		{
+			match(tokenType_for);
+			AstFor* const astFor = new AstFor();
+
+			astFor->initExpression = parse_expression();
+			match(tokenType_semicolon);
+			
+			astFor->expression = parse_expression();
+			match(tokenType_semicolon);
+
+			astFor->postIterationExpression = parse_expression();
+			match(tokenType_semicolon);
+
+			astFor->trueBranchStatement = parse_statement_block();
+
+			return astFor;
+		}
 		else if(m_token->type == tokenType_return)
 		{
 			match(tokenType_return);
@@ -703,69 +717,7 @@ struct Parser
 	AstNode* parse_expression()
 	{
 		AstNode* left = parse_expression6();
-
-		// This whole expression could be a function call
-		if(m_token->type == tokenType_lparen) {
-			match(tokenType_lparen);
-
-			AstFnCall* fnCall = new AstFnCall();
-			fnCall->theFunction = left;
-
-			while(m_token->type != tokenType_rparen)
-			{
-				AstNode* const arg = parse_expression();
-				if(arg)
-				{
-					fnCall->callArgs.push_back(arg);
-				}
-				else
-				{
-					assert(false);
-					return nullptr;
-				}
-			}
-			match(tokenType_rparen);
-
-			return fnCall;
-		}
-
-		// Or it could be an indexing.
-		if(m_token->type == tokenType_lsqBracket) {
-			match(tokenType_lsqBracket);
-
-			AstArrayIndexing* arrayIndexing = new AstArrayIndexing();
-			arrayIndexing->theArray = left;
-			arrayIndexing->index = parse_expression();
-
-			match(tokenType_rsqBracket);
-
-			return arrayIndexing;
-		}
 		
-		return left;
-	}
-
-	AstNode* parse_expressionMeberAccess()
-	{
-		AstNode* const left = parse_expression0();
-
-		if(m_token->type == tokenType_memberAccess)
-		{
-			match(tokenType_memberAccess);
-			if(m_token->type == tokenType_identifier)
-			{
-				assert(m_token->strData.size() > 0);
-				AstNode* const result = new AstMemberAcess(left, m_token->strData);
-				match(tokenType_identifier);
-				return result;
-			}
-			else
-			{
-				reportError(m_token->location, "Expected an indentifer for member access");
-				return nullptr;
-			}
-		}
-
 		return left;
 	}
 
@@ -842,12 +794,14 @@ struct Parser
 				memberInitExpr = parse_expression();
 
 				if(!memberInitExpr) {
+					assert(false);
 					return nullptr;
 				}	
 
 				match(tokenType_semicolon);
 			} else {
 				reportError(m_token->location, "Expected an identifier for member initialization when creating a table");
+				assert(false);
 				return nullptr;
 			}
 
@@ -886,52 +840,102 @@ struct Parser
 
 	AstNode* parse_expression0()
 	{
+		AstNode* left = nullptr;
 		if(m_token->type == tokenType_number)
 		{
-			AstNode* const result = new AstNumber(m_token->numberData);
+			left = new AstNumber(m_token->numberData);
 			matchAny();
-			return result;
 		}
 		else if(m_token->type == tokenType_string)
 		{
-			AstNode* const result = new AstString(m_token->strData);
+			left = new AstString(m_token->strData);
 			matchAny();
-			return result;
 		}
 		else if(m_token->type == tokenType_identifier)
 		{
-			AstNode* const result = new AstIdentifier(m_token->strData);
+			left = new AstIdentifier(m_token->strData);
 			matchAny();
-			return result;
 		}
 		else if(m_token->type == tokenType_lparen)
 		{
 			matchAny();
-			AstNode* const result =  parse_expression();
+			left = parse_expression();
 			match(tokenType_rparen);
-			return result;
 		}
 		else if(m_token->type == tokenType_blockBegin)
 		{
-			AstNode* tableMaker = parse_expression_tableMaker();
-			return tableMaker;
+			left = parse_expression_tableMaker();
 		}
 		else if(m_token->type == tokenType_array)
 		{
-			return parse_expression_arrayMaker();
+			left = parse_expression_arrayMaker();
 		}
 		else if(m_token->type == tokenType_if)
 		{
-			return parse_expression_if();
+			left = parse_expression_if();
 		}
 		else if(m_token->type == tokenType_fn)
 		{
-			return parse_expression_fndecl();
+			left = parse_expression_fndecl();
 		}
-		
+
 		//
-		reportError(m_token->location, "Unknown expression");
-		return nullptr;
+		if(left == nullptr) {
+			reportError(m_token->location, "Unknown expression");
+			assert(false);
+			return nullptr;
+		}
+
+		// In Addition, this thing could be a function call for an array indexing.
+		while(m_token->type == tokenType_lparen || m_token->type == tokenType_lsqBracket || m_token->type == tokenType_dot)
+		{
+			if(m_token->type == tokenType_lparen)
+			{
+				match(tokenType_lparen);
+
+				AstFnCall* fnCall = new AstFnCall();
+				fnCall->theFunction = left;
+
+				while(m_token->type != tokenType_rparen)
+				{
+					AstNode* const arg = parse_expression();
+					if(arg)
+					{
+						fnCall->callArgs.push_back(arg);
+					}
+					else
+					{
+						assert(false);
+						return nullptr;
+					}
+				}
+				match(tokenType_rparen);
+
+				left = fnCall;
+			}
+			else if(m_token->type == tokenType_lsqBracket)
+			{
+				match(tokenType_lsqBracket);
+
+				AstArrayIndexing* arrayIndexing = new AstArrayIndexing();
+				arrayIndexing->theArray = left;
+				arrayIndexing->index = parse_expression();
+
+				match(tokenType_rsqBracket);
+
+				left = arrayIndexing;
+			}
+			else if(m_token->type == tokenType_dot)
+			{
+				match(tokenType_dot);
+				assert(m_token->strData.size() > 0);
+				AstMemberAcess* const memberAcess = new AstMemberAcess(left, m_token->strData);
+				match(tokenType_identifier);
+				left = memberAcess;
+			}
+		}
+	
+		return left;
 	}
 
 	AstNode* parse_expression1()
@@ -939,17 +943,22 @@ struct Parser
 		if(m_token->type == tokenType_minus)
 		{
 			matchAny();
-			AstUnOp* const result =  new AstUnOp('-', parse_expression());
+			AstUnOp* const result =  new AstUnOp('-', parse_expression0());
 			return result;
 		}
 		else if(m_token->type == tokenType_plus)
 		{
 			matchAny();
-			AstUnOp* const result =  new AstUnOp('+', parse_expression());
+			AstUnOp* const result =  new AstUnOp('+', parse_expression0());
 			return result;
 		}
+		else
+		{
+			return parse_expression0();
+		}
 
-		return parse_expressionMeberAccess();
+		assert(false);
+		return nullptr;
 	}
 
 	AstNode* parse_expression2()
@@ -1034,12 +1043,11 @@ struct Parser
 
 	AstNode* parse_expression6()
 	{
-
 		AstNode* left = parse_expression5();
 
 		if(m_token->type == tokenType_assign)
 		{
-			matchAny();
+			match(tokenType_assign);
 			AstAssign* assign = new AstAssign(left, parse_expression());
 			return assign;
 		}
@@ -1052,6 +1060,7 @@ struct Parser
 		++m_token;
 	}
 
+
 	void match(TokenType const type)
 	{
 		if(m_token->type != type)
@@ -1061,6 +1070,15 @@ struct Parser
 			return;
 		}
 		++m_token;
+	}
+
+	bool is_matched(TokenType const type) {
+		if(m_token->type == type) {
+			match(type);
+			return true;
+		}
+
+		return false;
 	}
 };
 
@@ -1428,28 +1446,32 @@ struct Executor
 					if(itr != parser->m_fnIdx2fn.end())
 					{
 						const AstFnDecl* const fnToCallDecl = (AstFnDecl*)itr->second;
-						pushScope(fnToCallDecl, nullptr);
 
-						// Set the arguments
-						if(fnToCallDecl->argsNames.size() == n->callArgs.size())
-						{
-							for(int iArg = 0; iArg < n->callArgs.size(); ++iArg)
-							{
-								Var* const arg = findVariableInScope(fnToCallDecl->argsNames[iArg], true, false);
-								*arg = *evaluate(n->callArgs[iArg], ctx);
-							}
+						// Evalute the argument values.
+						std::vector<Var*> argValues;
+						for(int iArg = 0; iArg < n->callArgs.size(); ++iArg) {
+							Var* const val =  evaluate(n->callArgs[iArg], ctx);
+							argValues.push_back(val);
 						}
-						else
-						{
+
+						// Validate that the number of arguments is correct.
+						if(argValues.size() != fnToCallDecl->argsNames.size()) {
 							assert(false);
-							popScope();
 							return nullptr;
 						}
 
-						EvalCtx fnCtx;
+						// Set the function arguments variable and call the function.
+						pushScope(fnToCallDecl, nullptr);
 
+						for(int iArg = 0; iArg < n->callArgs.size(); ++iArg) {
+							Var* const arg = findVariableInScope(fnToCallDecl->argsNames[iArg], true, false);
+							*arg = *argValues[iArg];
+						}
+
+						EvalCtx fnCtx;
 						evaluate(fnToCallDecl->fnBodyBlock, fnCtx);
-						Var* result = fnCtx.forcedResult;
+						Var* const result = fnCtx.forcedResult;
+
 						popScope();
 
 						if(result == nullptr) {
@@ -1495,6 +1517,10 @@ struct Executor
 
 					if(varIndex && varIndex->m_varType == varType_f32) {
 						const int idx = (int)varIndex->m_value_f32;
+						if(idx < 0 || idx >= (*array->m_arrayValues).size()) {
+							assert(false);
+							return nullptr;
+						}
 						return (*array->m_arrayValues)[idx];
 					} else {
 						assert(false);
@@ -1546,15 +1572,30 @@ struct Executor
 			case astNodeType_while:
 			{
 				const AstWhile* const n = (AstWhile*)root;
-				const Var* expr = evaluate(n->expression, ctx);
 
 				pushScope(n, nullptr);
+				const Var* expr = evaluate(n->expression, ctx);
 				while(expr->m_value_f32 != 0.f) {
 					evaluate(n->trueBranchStatement, ctx);
 					expr = evaluate(n->expression, ctx);
 				}
 				popScope();
 	
+				return nullptr;
+			}break;
+			case astNodeType_for:
+			{
+				const AstFor* const n = (AstFor*)root;
+				pushScope(n, nullptr);
+				evaluate(n->initExpression, ctx);
+				const Var* expr = evaluate(n->expression, ctx);
+				while(expr->m_value_f32 != 0.f) {
+					evaluate(n->trueBranchStatement, ctx);
+					evaluate(n->postIterationExpression, ctx);
+					expr = evaluate(n->expression, ctx);
+				}
+				popScope();
+
 				return nullptr;
 			}break;
 			case astNodeType_return:
@@ -1615,7 +1656,6 @@ public :
 
 int main(int argc, const char* argv[])
 {
-
 	if(argc <= 1) {
 		return 0;
 	}
@@ -1659,11 +1699,7 @@ int main(int argc, const char* argv[])
 	Executor::EvalCtx ctx;
 	e.evaluate(root, ctx);
 
-	for(auto p : e.m_variablesLut) {
-		printf("%s = ", p.first.c_str());
-		printVariable(p.second);
-	}
-
 	system("pause");
+
 	return 0;
 }
