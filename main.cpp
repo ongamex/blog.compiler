@@ -770,8 +770,7 @@ struct Parser
 		assert(fnDecl->fnBodyBlock != nullptr);
 
 		// If this is a block statement list, then force disable the specific scope for it, as we are going to use the scope of the function.
-		if(fnDecl->fnBodyBlock && fnDecl->fnBodyBlock->type == astNodeType_statementList)
-		{
+		if(fnDecl->fnBodyBlock && fnDecl->fnBodyBlock->type == astNodeType_statementList) {
 			AstStatementList* const bodyStatementList = static_cast<AstStatementList*>(fnDecl->fnBodyBlock);
 			bodyStatementList->needsOwnScope = false;
 		}
@@ -784,7 +783,7 @@ struct Parser
 		match(tokenType_blockBegin);
 		AstTableMaker* const result = new AstTableMaker();
 
-		while(true)
+		while(m_token->type != tokenType_blockEnd)
 		{
 			// { identifer = expression; ... }
 			if(m_token->type == tokenType_identifier) {
@@ -804,12 +803,8 @@ struct Parser
 				assert(false);
 				return nullptr;
 			}
-
-			if(m_token->type == tokenType_blockEnd) {
-				match(tokenType_blockEnd);
-				break;
-			}
 		}
+		match(tokenType_blockEnd);
 
 		return result;
 	}
