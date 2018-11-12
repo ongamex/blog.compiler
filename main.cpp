@@ -1,20 +1,49 @@
-#include <iostream>
 #include <unordered_map>
+#include <vector>
 #include <string>
 #include <sstream>
 #include <memory>
-#include <vector>
-#include <locale>
-#include <assert.h>
-
 #include <cstdarg>
+#include <cassert>
+
+// A location in our source code used primerly for error reporting.
+struct Location
+{
+	Location() = default;
+	Location(int column, int line)
+		: column(column)
+		, line(line)
+	{}
+
+	int column = -1;
+	int line = -1;
+};
+
+// A structure used to describe all type of error exceptions that we use.
+struct Error
+{
+	Error(const Location location, std::string message)
+		: location(location)
+		, message(std::move(message))
+	{}
+
+	Location location;
+	std::string message;
+};
+
+// Set to 1 when debugging.
+#if 1
+	#define ThrowError(location, msg) do {assert(false); throw Error(location, msg); } while(false)
+#else
+	#define ThrowError(location, msg) do { throw Error(location, msg); } while(false)
+#endif
 
 // Identifies the type of the token (also know as lexeme) matched by the lexer.
 // Some tokens store additional data with the token, like a float for number or
 // a string for string literals and identifiers.
 enum TokenType : int
 {
-	tokenType_none,
+	tokenType_endToken,
 	tokenType_number,
 	tokenType_identifier,
 	tokenType_string,
@@ -52,13 +81,6 @@ enum TokenType : int
 	tokenType_array,
 };
 
-// A location in our source code used primerly for error reporting.
-struct Location
-{
-	int column = -1;
-	int line = -1;
-};
-
 // A token (also known as lexeme) matched by the lexter.
 // Tokens are basically the building blocks of the language.
 // Example token types:
@@ -73,7 +95,7 @@ struct Token
 		location({column, line})
 	{}
 
-	TokenType type = tokenType_none;
+	TokenType type = tokenType_endToken;
 	float numberData; // The number asociated with this token (if any).
 	std::string strData; // The string asociated with this token (if any). Example usage is with identifiers or string literals.
 	Location location; // The location of the token in the source file.
@@ -82,26 +104,42 @@ struct Token
 // The lexer takes the input text, and converts it to a linear set of tokens(also know as lexemes).
 struct Lexer
 {
-	int column = 0;
-	int line = 0;
+	Lexer() = default;
 
-	Lexer(const char* const code) :
-		m_code(code),
-		m_ptr(code)
-	{}
+	void getAllTokens(const char* const codeToTokenize, std::vector<Token>& resultTokens) {
+
+		if(codeToTokenize == nullptr) {
+			return;
+		}
+
+		*this = Lexer(); // Reset to default.
+
+		m_code = codeToTokenize;
+		m_ptr = m_code;
+
+		while(true) {
+			const Token tok = getNextToken();
+			resultTokens.push_back(tok);
+
+			if(tok.type == tokenType_endToken) { 
+				break;
+			}
+		}
+	}
+
+private :
 
 	void eatChar() {
 		if(*m_ptr == '\n') {
-			column=0;
-			line++;
+			m_column=0;
+			m_line++;
 		} else {
-			column++;
+			m_column++;
 		}
 		m_ptr++;
 	}
 
-	void skipSpacesAhead()
-	{
+	void skipSpacesAhead() {
 		while(isspace(*m_ptr)) {
 			eatChar();
 		}
@@ -114,7 +152,7 @@ struct Lexer
 		if(*m_ptr == '\0')
 		{
 			// No more tokes to process, this should be it!
-			return Token(tokenType_none, column, line);
+			return Token(tokenType_endToken, m_column, m_line);
 		}
 		else if(isalpha(*m_ptr) || *m_ptr == '_')
 		{
@@ -126,54 +164,29 @@ struct Lexer
 			}
 
 			// Check if this is not an identifier but a keyword.
-			if(token.strData == "fn") {
-				token.type = tokenType_fn;
-				token.strData.clear();
-			}
-			else if(token.strData == "if") {
-				token.type = tokenType_if;
-				token.strData.clear();
-			}
-			else if(token.strData == "else") {
-				token.type = tokenType_else;
-				token.strData.clear();
-			}
-			else if(token.strData == "print") {
-				token.type = tokenType_print;
-				token.strData.clear();
-			}
-			else if(token.strData == "return") {
-				token.type = tokenType_return;
-				token.strData.clear();
-			} 
-			else if(token.strData == "while") {
-				token.type = tokenType_while;
-				token.strData.clear();
-			}
-			else if(token.strData == "for") {
-				token.type = tokenType_for;
-				token.strData.clear();
-			}else if(token.strData == "array") {
-				token.type = tokenType_array;
-				token.strData.clear();
-			}
-			else {
-				token.type = tokenType_identifier;
-			}
+			if(token.strData == "fn") { token.type = tokenType_fn; token.strData.clear(); }
+			else if(token.strData == "if")   { token.type = tokenType_if; token.strData.clear(); }
+			else if(token.strData == "else") { token.type = tokenType_else; token.strData.clear(); }
+			else if(token.strData == "print") { token.type = tokenType_print; token.strData.clear(); }
+			else if(token.strData == "return") { token.type = tokenType_return; token.strData.clear(); } 
+			else if(token.strData == "while") { token.type = tokenType_while; token.strData.clear(); }
+			else if(token.strData == "for") { token.type = tokenType_for; token.strData.clear(); }
+			else if(token.strData == "array") { token.type = tokenType_array; token.strData.clear(); }
+			else { token.type = tokenType_identifier; }
 
-			token.location.column = column;
-			token.location.line = line;
+			token.location.column = m_column;
+			token.location.line = m_line;
 
 			return token;
 		}
 		else if(*m_ptr == '"')
 		{
+			// This is a string ligeral.
 			Token token;
 			token.type = tokenType_string;
 
 			eatChar();
-			while(*m_ptr!='"')
-			{
+			while(*m_ptr!='"') {
 				token.strData.push_back(*m_ptr);
 				eatChar();
 			}
@@ -181,81 +194,24 @@ struct Lexer
 
 			return token;
 		}
-		else if(*m_ptr == ';') {
-			eatChar();
-			return Token(tokenType_semicolon, column, line);
-		}
-		else if(*m_ptr == '.') {
-			eatChar();
-			return Token(tokenType_dot, column, line);
-		}
-		else if(*m_ptr == ',') {
-			eatChar();
-			return Token(tokenType_comma, column, line);
-		}
-		else if(*m_ptr == '=') {
-			if(m_ptr[1] == '=') {
-				eatChar();
-				eatChar();
-				return Token(tokenType_equals, column, line);
-			} else {
-				eatChar();
-				return Token(tokenType_assign, column, line);
-			}
-		}
-		else if(m_ptr[0] == '!' && m_ptr[1] == '=') {
-			eatChar();
-			eatChar();
-			return Token(tokenType_notEquals, column, line);
-		}
-		else if(*m_ptr == '<') {
-			eatChar();
-			return Token(tokenType_less, column, line);
-		}
-		else if(*m_ptr == '>') {
-			eatChar();
-			return Token(tokenType_greater, column, line);
-		}
-		else if(*m_ptr == '*') {
-			eatChar();
-			return Token(tokenType_asterisk, column, line);
-		}
-		else if(*m_ptr == '/') {
-			eatChar();
-			return Token(tokenType_slash, column, line);
-		}
-		else if(*m_ptr == '+') {
-			eatChar();
-			return Token(tokenType_plus, column, line);
-		}
-		else if(*m_ptr == '-') {
-			m_ptr++;
-			return Token(tokenType_minus, column, line);
-		}
-		else if(*m_ptr == '(') {
-			eatChar();
-			return Token(tokenType_lparen, column, line);
-		}
-		else if(*m_ptr == ')') {
-			eatChar();
-			return Token(tokenType_rparen, column, line);
-		}
-		else if(*m_ptr == '{') {
-			eatChar();
-			return Token(tokenType_blockBegin, column, line);
-		}
-		else if(*m_ptr == '}') {
-			eatChar();
-			return Token(tokenType_blockEnd, column, line);
-		}
-		else if(*m_ptr == '[') {
-			eatChar();
-			return Token(tokenType_lsqBracket, column, line);
-		}
-		else if(*m_ptr == ']') {
-			eatChar();
-			return Token(tokenType_rsqBracket, column, line);
-		}
+		else if(*m_ptr == ';') { eatChar(); return Token(tokenType_semicolon, m_column, m_line); }
+		else if(*m_ptr == '.') { eatChar(); return Token(tokenType_dot, m_column, m_line); }
+		else if(*m_ptr == ',') { eatChar(); return Token(tokenType_comma, m_column, m_line); }
+		else if(m_ptr[0] == '=' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_equals, m_column, m_line); }
+		else if(m_ptr[0] == '=' && m_ptr[1] != '=') { eatChar(); eatChar(); return Token(tokenType_assign, m_column, m_line); }
+		else if(m_ptr[0] == '!' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_notEquals, m_column, m_line); }
+		else if(*m_ptr == '<') { eatChar(); return Token(tokenType_less, m_column, m_line); }
+		else if(*m_ptr == '>') { eatChar(); return Token(tokenType_greater, m_column, m_line); }
+		else if(*m_ptr == '*') { eatChar(); return Token(tokenType_asterisk, m_column, m_line); }
+		else if(*m_ptr == '/') { eatChar(); return Token(tokenType_slash, m_column, m_line); }
+		else if(*m_ptr == '+') { eatChar(); return Token(tokenType_plus, m_column, m_line); }
+		else if(*m_ptr == '-') { eatChar(); return Token(tokenType_minus, m_column, m_line); }
+		else if(*m_ptr == '(') { eatChar(); return Token(tokenType_lparen, m_column, m_line); }
+		else if(*m_ptr == ')') { eatChar(); return Token(tokenType_rparen, m_column, m_line); }
+		else if(*m_ptr == '{') { eatChar(); return Token(tokenType_blockBegin, m_column, m_line); }
+		else if(*m_ptr == '}') { eatChar(); return Token(tokenType_blockEnd, m_column, m_line); }
+		else if(*m_ptr == '[') { eatChar(); return Token(tokenType_lsqBracket, m_column, m_line); }
+		else if(*m_ptr == ']') { eatChar(); return Token(tokenType_rsqBracket, m_column, m_line); }
 		else if(isdigit(*m_ptr))
 		{
 			// This should be a number.
@@ -280,21 +236,26 @@ struct Lexer
 			Token token;
 			token.type = tokenType_number;
 			token.numberData = numberAccum;
-			token.location.column = column;
-			token.location.line = line;
+			token.location.column = m_column;
+			token.location.line = m_line;
 
 			return token;
 		}
 
-		// Should never happen.
-		assert(false);
-		return Token();
+		// Unable to recognize any token.
+		ThrowError(Location(m_column, m_line), "Unable to recognize any token");
 	}
+
+	// Internal state used to perform the tokenization.
+	int m_column = 0;
+	int m_line = 1;
 
 	const char* m_code = nullptr;
 	const char* m_ptr = nullptr;
 };
 
+// An id for each node type of the Abstract Syntax Tree.
+// Each node represens one "constriction" in the language.
 enum AstNodeType {
 	astNodeType_invalid,
 	astNodeType_number,
@@ -325,31 +286,33 @@ enum AstNodeType {
 // statements - expression, if, while, return, block of statements and so on.
 struct AstNode
 {
-	AstNode(AstNodeType const type = astNodeType_invalid) :
-		type(type)
+	AstNode(AstNodeType const type, Location const location)
+		: type(type)
+		, location(location)
 	{}
 	
 	virtual ~AstNode() = default;
 
+	Location location; // the location of the expression in the code, ot at least where the expression starts.
 	AstNodeType type;
 };
 
 // AstNode representing a single number literal (basically AstNode representation of the matched token by the lexer).
 struct AstNumber : public AstNode
 {
-	AstNumber(float const value = NAN) 
-		: AstNode(astNodeType_number)
+	AstNumber(float const value, Location location) 
+		: AstNode(astNodeType_number, location)
 		, value(value)
 	{}
 
-	float value = NAN;
+	float value;
 };
 
 // AstNode representing a single string literal (basically AstNode representation of the matched token by the lexer).
 struct AstString : public AstNode
 {
-	AstString(std::string s) 
-		: AstNode(astNodeType_string)
+	AstString(std::string s, Location location) 
+		: AstNode(astNodeType_string, location)
 		, value(std::move(s))
 	{}
 
@@ -359,8 +322,8 @@ struct AstString : public AstNode
 // AstNode representing a single identifer (basically AstNode representation of the matched token by the lexer).
 struct AstIdentifier : public AstNode
 {
-	AstIdentifier(std::string identifier) 
-		: AstNode(astNodeType_identifier)
+	AstIdentifier(std::string identifier, Location location) 
+		: AstNode(astNodeType_identifier, location)
 		, identifier(identifier)
 	{}
 
@@ -371,10 +334,10 @@ struct AstIdentifier : public AstNode
 // Exmple: <expression>.<member> like point.x
 struct AstMemberAcess : public AstNode
 {
-	AstMemberAcess(AstNode* const left, const std::string& memberName)
+	AstMemberAcess(AstNode* const left, const std::string& memberName, Location location)
 		: left(left)
 		, memberName(memberName)
-		, AstNode(astNodeType_memberAccess)
+		, AstNode(astNodeType_memberAccess, location)
 	{}
 
 	AstNode* left = nullptr;
@@ -385,8 +348,8 @@ struct AstMemberAcess : public AstNode
 // Example: { x = 5; y = 10; }
 struct AstTableMaker : public AstNode
 {
-	AstTableMaker()
-		: AstNode(astNodeType_tableMaker)
+	AstTableMaker(Location location)
+		: AstNode(astNodeType_tableMaker, location)
 	{}
 
 	std::unordered_map<std::string, AstNode*> memberToExpression;
@@ -396,8 +359,8 @@ struct AstTableMaker : public AstNode
 // Example: array{ 5, 10, 15, 20 }
 struct AstArrayMaker : public AstNode
 {
-	AstArrayMaker()
-		: AstNode(astNodeType_arrayMaker)
+	AstArrayMaker(Location location)
+		: AstNode(astNodeType_arrayMaker, location)
 	{}
 
 	std::vector<AstNode*> arrayElements;
@@ -408,8 +371,8 @@ struct AstArrayMaker : public AstNode
 // everything else, until the matching ')' is concidered a function argument.
 struct AstFnCall : public AstNode
 {
-	AstFnCall()
-		: AstNode(astNodeType_fnCall)
+	AstFnCall(Location location)
+		: AstNode(astNodeType_fnCall, location)
 	{}
 
 	AstNode* theFunction = nullptr; // The node that we are going to evaluate to obtain the function that we're going to call.
@@ -421,8 +384,8 @@ struct AstFnCall : public AstNode
 // everything else, until the matching ']' is going to be used as index.
 struct AstArrayIndexing : public AstNode
 {
-	AstArrayIndexing()
-		: AstNode(astNodeType_arrayIndexing)
+	AstArrayIndexing(Location location)
+		: AstNode(astNodeType_arrayIndexing, location)
 	{}
 
 	AstNode* theArray = nullptr; // The node that we are going to evaluate to obtain the array variable.
@@ -443,8 +406,8 @@ enum BinOp : int
 
 struct AstBinOp : public AstNode
 {
-	AstBinOp(const BinOp op, AstNode* const left, AstNode* const right) 
-		: AstNode(astNodeType_binop)
+	AstBinOp(const BinOp op, AstNode* const left, AstNode* const right, Location location) 
+		: AstNode(astNodeType_binop, location)
 		, op(op)
 		, left(left)
 		, right(right)
@@ -457,8 +420,8 @@ struct AstBinOp : public AstNode
 
 struct AstUnOp : public AstNode
 {
-	AstUnOp(char op, AstNode* left) 
-		: AstNode(astNodeType_unop)
+	AstUnOp(char op, AstNode* left, Location location) 
+		: AstNode(astNodeType_unop, location)
 		, op(op)
 		, left(left)
 	{}
@@ -469,8 +432,8 @@ struct AstUnOp : public AstNode
 
 struct AstAssign : public AstNode
 {
-	AstAssign(AstNode* left, AstNode* right) 
-		: AstNode(astNodeType_assign)
+	AstAssign(AstNode* left, AstNode* right, Location location) 
+		: AstNode(astNodeType_assign, location)
 		, left(left)
 		, right(right)
 	{}
@@ -481,8 +444,8 @@ struct AstAssign : public AstNode
 
 struct AstStatementList : public AstNode
 {
-	AstStatementList() :
-		AstNode(astNodeType_statementList)
+	AstStatementList(Location location) :
+		AstNode(astNodeType_statementList, location)
 	{}
 
 	bool needsOwnScope = true; // if specified when executing a new scope will be generated for the statement list.
@@ -491,8 +454,8 @@ struct AstStatementList : public AstNode
 
 struct AstIf : public AstNode
 {
-	AstIf() :
-		AstNode(astNodeType_if)
+	AstIf(Location location) :
+		AstNode(astNodeType_if, location)
 	{}
 
 	AstNode* expression = nullptr;
@@ -502,8 +465,8 @@ struct AstIf : public AstNode
 
 struct AstFnDecl : public AstNode
 {
-	AstFnDecl() :
-		AstNode(astNodeType_fndecl)
+	AstFnDecl(Location location) :
+		AstNode(astNodeType_fndecl, location)
 	{}
 
 	AstNode* fnBodyBlock = nullptr; // THe code of the function.
@@ -513,8 +476,8 @@ struct AstFnDecl : public AstNode
 
 struct AstWhile : public AstNode
 {
-	AstWhile() :
-		AstNode(astNodeType_while)
+	AstWhile(Location location) :
+		AstNode(astNodeType_while, location)
 	{}
 
 	AstNode* expression = nullptr;
@@ -523,8 +486,8 @@ struct AstWhile : public AstNode
 
 struct AstFor : public AstNode
 {
-	AstFor() :
-		AstNode(astNodeType_for)
+	AstFor(Location location) :
+		AstNode(astNodeType_for, location)
 	{}
 
 	AstNode* initExpression = nullptr;
@@ -535,9 +498,9 @@ struct AstFor : public AstNode
 
 struct AstPrint : public AstNode
 {
-	AstPrint(AstNode* expression) :
-		AstNode(astNodeType_print),
-		expression(expression)
+	AstPrint(AstNode* expression, Location location)
+		: AstNode(astNodeType_print, location)
+		, expression(expression)
 	{}
 
 	AstNode* expression;
@@ -545,18 +508,12 @@ struct AstPrint : public AstNode
 
 struct AstReturn : public AstNode
 {
-	AstReturn() :
-		AstNode(astNodeType_return),
+	AstReturn(Location location) :
+		AstNode(astNodeType_return, location),
 		expression(nullptr)
 	{}
 
 	AstNode* expression;
-};
-
-struct Error
-{
-	Location location;
-	std::string message;
 };
 
 struct Parser
@@ -597,9 +554,7 @@ struct Parser
 	// A block of statements or a single statement.
 	AstNode* parse_statement_block() {
 		if(m_token->type == tokenType_blockBegin) {
-			match(tokenType_blockBegin);
-
-			AstStatementList* const stmntList = new AstStatementList();
+			AstStatementList* const stmntList = new AstStatementList(match(tokenType_blockBegin)->location);
 			while(m_token->type != tokenType_blockEnd)
 			{
 				AstNode* node = parse_statement();
@@ -631,8 +586,8 @@ struct Parser
 	{
 		if(m_token->type == tokenType_print)
 		{
-			match(tokenType_print);
-			AstPrint* const astPrint = new AstPrint(parse_expression());
+			const Token* const printToken = match(tokenType_print);
+			AstPrint* const astPrint = new AstPrint(parse_expression(), printToken->location);
 			match(tokenType_semicolon);
 			return astPrint;
 		}
@@ -649,8 +604,7 @@ struct Parser
 		}
 		else if(m_token->type == tokenType_while)
 		{
-			match(tokenType_while);
-			AstWhile* const astWhile = new AstWhile();
+			AstWhile* const astWhile = new AstWhile(match(tokenType_while)->location);
 			astWhile->expression = parse_expression();
 			astWhile->trueBranchStatement = parse_statement_block();
 
@@ -658,8 +612,7 @@ struct Parser
 		}
 		else if(m_token->type == tokenType_for)
 		{
-			match(tokenType_for);
-			AstFor* const astFor = new AstFor();
+			AstFor* const astFor = new AstFor(match(tokenType_for)->location);
 
 			astFor->initExpression = parse_expression();
 			match(tokenType_semicolon);
@@ -668,7 +621,6 @@ struct Parser
 			match(tokenType_semicolon);
 
 			astFor->postIterationExpression = parse_expression();
-			match(tokenType_semicolon);
 
 			astFor->trueBranchStatement = parse_statement_block();
 
@@ -676,8 +628,7 @@ struct Parser
 		}
 		else if(m_token->type == tokenType_return)
 		{
-			match(tokenType_return);
-			AstReturn* const astReturn = new AstReturn;
+			AstReturn* const astReturn = new AstReturn(match(tokenType_return)->location);
 
 			if(m_token->type != tokenType_semicolon) {
 				astReturn->expression = parse_expression();
@@ -698,9 +649,9 @@ struct Parser
 
 	AstNode* parse_programRoot()
 	{
-		AstStatementList* progRoot = new AstStatementList();
+		AstStatementList* progRoot = new AstStatementList(Location(0,0)); // TODO: proper location of the 1st statement.
 		progRoot->needsOwnScope = false;
-		while(m_token->type != tokenType_none) {
+		while(m_token->type != tokenType_endToken) {
 			AstNode* node = parse_statement();
 			if(node) {
 				progRoot->m_statements.push_back(node);
@@ -725,8 +676,7 @@ struct Parser
 	{
 		if(m_token->type == tokenType_if)
 		{
-			match(tokenType_if);
-			AstIf* const astIf = new AstIf();
+			AstIf* const astIf = new AstIf(match(tokenType_if)->location);
 			astIf->expression = parse_expression();
 			if(astIf->expression == nullptr) {
 				reportError(m_token->location, "Failed to parse if condition expression");
@@ -751,12 +701,9 @@ struct Parser
 	{
 		AstFnDecl* fnDecl = nullptr;
 
-		if(m_token->type == tokenType_fn)
-		{
-			fnDecl = new AstFnDecl();
+		if(m_token->type == tokenType_fn) {
+			fnDecl = new AstFnDecl(match(tokenType_fn)->location);
 			registerFunction(fnDecl);
-
-			match(tokenType_fn);
 
 			match(tokenType_lparen);
 			while(m_token->type == tokenType_identifier) {
@@ -780,8 +727,7 @@ struct Parser
 
 	AstNode* parse_expression_tableMaker()
 	{
-		match(tokenType_blockBegin);
-		AstTableMaker* const result = new AstTableMaker();
+		AstTableMaker* const result = new AstTableMaker(match(tokenType_blockBegin)->location);
 
 		while(m_token->type != tokenType_blockEnd)
 		{
@@ -811,10 +757,10 @@ struct Parser
 
 	AstNode* parse_expression_arrayMaker()
 	{
-		match(tokenType_array);
+		const Token* const tokenArray = match(tokenType_array);
 		match(tokenType_blockBegin);
 
-		AstArrayMaker* result = new AstArrayMaker();
+		AstArrayMaker* result = new AstArrayMaker(tokenArray->location);
 
 		while(m_token->type != tokenType_blockEnd) {
 			result->arrayElements.push_back(parse_expression());
@@ -838,22 +784,22 @@ struct Parser
 		AstNode* left = nullptr;
 		if(m_token->type == tokenType_number)
 		{
-			left = new AstNumber(m_token->numberData);
-			matchAny();
+			left = new AstNumber(m_token->numberData, m_token->location);
+			match(tokenType_number);
 		}
 		else if(m_token->type == tokenType_string)
 		{
-			left = new AstString(m_token->strData);
-			matchAny();
+			left = new AstString(m_token->strData, m_token->location);
+			match(tokenType_string);
 		}
 		else if(m_token->type == tokenType_identifier)
 		{
-			left = new AstIdentifier(m_token->strData);
-			matchAny();
+			left = new AstIdentifier(m_token->strData, m_token->location);
+			match(tokenType_identifier);
 		}
 		else if(m_token->type == tokenType_lparen)
 		{
-			matchAny();
+			match(tokenType_lparen);
 			left = parse_expression();
 			match(tokenType_rparen);
 		}
@@ -886,20 +832,16 @@ struct Parser
 		{
 			if(m_token->type == tokenType_lparen)
 			{
-				match(tokenType_lparen);
-
-				AstFnCall* fnCall = new AstFnCall();
+				AstFnCall* fnCall = new AstFnCall(match(tokenType_lparen)->location);
 				fnCall->theFunction = left;
 
 				while(m_token->type != tokenType_rparen)
 				{
+					// Gather the function call arguments.
 					AstNode* const arg = parse_expression();
-					if(arg)
-					{
+					if(arg) {
 						fnCall->callArgs.push_back(arg);
-					}
-					else
-					{
+					} else {
 						assert(false);
 						return nullptr;
 					}
@@ -910,9 +852,7 @@ struct Parser
 			}
 			else if(m_token->type == tokenType_lsqBracket)
 			{
-				match(tokenType_lsqBracket);
-
-				AstArrayIndexing* arrayIndexing = new AstArrayIndexing();
+				AstArrayIndexing* arrayIndexing = new AstArrayIndexing(match(tokenType_lsqBracket)->location);
 				arrayIndexing->theArray = left;
 				arrayIndexing->index = parse_expression();
 
@@ -924,7 +864,7 @@ struct Parser
 			{
 				match(tokenType_dot);
 				assert(m_token->strData.size() > 0);
-				AstMemberAcess* const memberAcess = new AstMemberAcess(left, m_token->strData);
+				AstMemberAcess* const memberAcess = new AstMemberAcess(left, m_token->strData, m_token->location);
 				match(tokenType_identifier);
 				left = memberAcess;
 			}
@@ -935,16 +875,18 @@ struct Parser
 
 	AstNode* parse_expression1()
 	{
+		const Location tokenLoc = m_token->location;
+
 		if(m_token->type == tokenType_minus)
 		{
-			matchAny();
-			AstUnOp* const result =  new AstUnOp('-', parse_expression0());
+			match(tokenType_minus);
+			AstUnOp* const result =  new AstUnOp('-', parse_expression0(), tokenLoc);
 			return result;
 		}
 		else if(m_token->type == tokenType_plus)
 		{
-			matchAny();
-			AstUnOp* const result =  new AstUnOp('+', parse_expression0());
+			match(tokenType_plus);
+			AstUnOp* const result =  new AstUnOp('+', parse_expression0(), tokenLoc);
 			return result;
 		}
 		else
@@ -958,18 +900,19 @@ struct Parser
 
 	AstNode* parse_expression2()
 	{
-		AstNode* left = parse_expression1();
+		AstNode* const left = parse_expression1();
 
+		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_asterisk)
 		{
-			matchAny();
-			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression2());
+			match(tokenType_asterisk);
+			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression2(), tokenLoc);
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
-			matchAny();
-			AstNode* retval = new AstBinOp(binop_div, left, parse_expression2());
+			match(tokenType_slash);
+			AstNode* retval = new AstBinOp(binop_div, left, parse_expression2(), tokenLoc);
 			return retval;
 		}
 
@@ -980,16 +923,17 @@ struct Parser
 	{
 		AstNode* left = parse_expression2();
 
+		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_plus)
 		{
-			matchAny();
-			AstNode* retval = new AstBinOp(binop_add, left, parse_expression());
+			match(tokenType_plus);
+			AstNode* retval = new AstBinOp(binop_add, left, parse_expression(), tokenLoc);
 			return retval;
 		}
 		else if(m_token->type == tokenType_minus)
 		{
-			matchAny();
-			AstNode* retval = new AstBinOp(binop_sub, left, parse_expression());
+			match(tokenType_minus);
+			AstNode* retval = new AstBinOp(binop_sub, left, parse_expression(), tokenLoc);
 			return retval;
 		}
 
@@ -1000,16 +944,17 @@ struct Parser
 	{
 		AstNode* left = parse_expression3();
 
+		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_equals)
 		{
-			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_equals, left, parse_expression());
+			match(tokenType_equals);
+			AstBinOp* equals = new AstBinOp(binop_equals, left, parse_expression(), tokenLoc);
 			return equals;
 		} 
 		else if(m_token->type == tokenType_notEquals)
 		{
-			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_notEquals, left, parse_expression());
+			match(tokenType_notEquals);
+			AstBinOp* equals = new AstBinOp(binop_notEquals, left, parse_expression(), tokenLoc);
 			return equals;
 		}
 
@@ -1020,16 +965,17 @@ struct Parser
 	{
 		AstNode* left = parse_expression4();
 
+		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_less)
 		{
-			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_less, left, parse_expression());
+			match(tokenType_less);
+			AstBinOp* equals = new AstBinOp(binop_less, left, parse_expression(), tokenLoc);
 			return equals;
 		}
 		else if(m_token->type == tokenType_greater)
 		{
-			matchAny();
-			AstBinOp* equals = new AstBinOp(binop_greater, left, parse_expression());
+			match(tokenType_greater);
+			AstBinOp* equals = new AstBinOp(binop_greater, left, parse_expression(), tokenLoc);
 			return equals;
 		}
 
@@ -1040,40 +986,24 @@ struct Parser
 	{
 		AstNode* left = parse_expression5();
 
+		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_assign)
 		{
 			match(tokenType_assign);
-			AstAssign* assign = new AstAssign(left, parse_expression());
+			AstAssign* assign = new AstAssign(left, parse_expression(), tokenLoc);
 			return assign;
 		}
 
 		return left;	
 	}
 
-	void matchAny()
-	{
-		++m_token;
-	}
-
-
-	void match(TokenType const type)
-	{
-		if(m_token->type != type)
-		{
-			// A compilation error here!
-			reportError(m_token->location, "Unexpected token");
-			return;
+	const Token* match(TokenType const type) {
+		if(m_token->type != type) {
+			// TODO: a better message based on the expected token .
+			ThrowError(m_token->location, "Unexpected token");
+			return nullptr;
 		}
-		++m_token;
-	}
-
-	bool is_matched(TokenType const type) {
-		if(m_token->type == type) {
-			match(type);
-			return true;
-		}
-
-		return false;
+		return m_token++;
 	}
 };
 
@@ -1670,29 +1600,32 @@ int main(int argc, const char* argv[])
 		}
 	}
 
+	try 
+	{
+		std ::vector<Token> tokens;
 
-	Lexer lexer(fileContents.data());
-	std ::vector<Token> tokens;
-
-	while(true) {
-		const Token tok = lexer.getNextToken();
-		tokens.push_back(tok);
+		Lexer lexer;
+		lexer.getAllTokens(fileContents.data(), tokens);
 	
-		if(tok.type == tokenType_none) { 
-			break;
-		}
+		Parser p;
+		p.m_token = tokens.data();
+
+		p.parse();
+		AstNode* root = p.root;
+
+		Executor e;
+		e.parser = &p;
+		Executor::EvalCtx ctx;
+		e.evaluate(root, ctx);
 	}
-
-	Parser p;
-	p.m_token = tokens.data();
-
-	p.parse();
-	AstNode* root = p.root;
-
-	Executor e;
-	e.parser = &p;
-	Executor::EvalCtx ctx;
-	e.evaluate(root, ctx);
+	catch(Error& e)
+	{
+		printf("Error at %d, %d:\n\t%s", e.location.line, e.location.column, e.message.c_str());
+	}
+	catch(...)
+	{
+		printf("Unknown error");
+	}
 
 	system("pause");
 
