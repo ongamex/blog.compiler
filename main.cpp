@@ -58,6 +58,7 @@ enum TokenType : int
 	//tokenType_greaterEquals, // >=
 	tokenType_equals, // ==
 	tokenType_notEquals, // !=
+	tokenType_not, // !
 	tokenType_plus, // +
 	tokenType_minus, // -
 	tokenType_asterisk, // *
@@ -198,8 +199,9 @@ private :
 		else if(*m_ptr == '.') { eatChar(); return Token(tokenType_dot, m_column, m_line); }
 		else if(*m_ptr == ',') { eatChar(); return Token(tokenType_comma, m_column, m_line); }
 		else if(m_ptr[0] == '=' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_equals, m_column, m_line); }
-		else if(m_ptr[0] == '=' && m_ptr[1] != '=') { eatChar(); eatChar(); return Token(tokenType_assign, m_column, m_line); }
+		else if(m_ptr[0] == '=' && m_ptr[1] != '=') { eatChar(); return Token(tokenType_assign, m_column, m_line); }
 		else if(m_ptr[0] == '!' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_notEquals, m_column, m_line); }
+		else if(m_ptr[0] == '!' && m_ptr[1] != '=') { eatChar(); return Token(tokenType_not, m_column, m_line); }
 		else if(*m_ptr == '<') { eatChar(); return Token(tokenType_less, m_column, m_line); }
 		else if(*m_ptr == '>') { eatChar(); return Token(tokenType_greater, m_column, m_line); }
 		else if(*m_ptr == '*') { eatChar(); return Token(tokenType_asterisk, m_column, m_line); }
@@ -1585,6 +1587,7 @@ int main(int argc, const char* argv[])
 		return 0;
 	}
 
+	// Read the contents of the specified file.
 	std::vector<char> fileContents;
 	{
 		FILE* f = fopen(argv[1], "rb");
