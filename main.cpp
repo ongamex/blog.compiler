@@ -58,6 +58,8 @@ enum TokenType : int
 	//tokenType_greaterEquals, // >=
 	tokenType_equals, // ==
 	tokenType_notEquals, // !=
+	tokenType_lessEquals, // <=
+	tokenType_greaterEquals, // >=
 	tokenType_not, // !
 	tokenType_plus, // +
 	tokenType_minus, // -
@@ -195,13 +197,12 @@ private :
 
 			return token;
 		}
-		else if(*m_ptr == ';') { eatChar(); return Token(tokenType_semicolon, m_column, m_line); }
-		else if(*m_ptr == '.') { eatChar(); return Token(tokenType_dot, m_column, m_line); }
-		else if(*m_ptr == ',') { eatChar(); return Token(tokenType_comma, m_column, m_line); }
 		else if(m_ptr[0] == '=' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_equals, m_column, m_line); }
-		else if(m_ptr[0] == '=' && m_ptr[1] != '=') { eatChar(); return Token(tokenType_assign, m_column, m_line); }
 		else if(m_ptr[0] == '!' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_notEquals, m_column, m_line); }
-		else if(m_ptr[0] == '!' && m_ptr[1] != '=') { eatChar(); return Token(tokenType_not, m_column, m_line); }
+		else if(m_ptr[0] == '<' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_lessEquals, m_column, m_line); }
+		else if(m_ptr[0] == '>' && m_ptr[1] == '=') { eatChar(); eatChar(); return Token(tokenType_greaterEquals, m_column, m_line); }
+		else if(*m_ptr == '!') { eatChar(); return Token(tokenType_not, m_column, m_line); }
+		else if(*m_ptr == '=') { eatChar(); return Token(tokenType_assign, m_column, m_line); }
 		else if(*m_ptr == '<') { eatChar(); return Token(tokenType_less, m_column, m_line); }
 		else if(*m_ptr == '>') { eatChar(); return Token(tokenType_greater, m_column, m_line); }
 		else if(*m_ptr == '*') { eatChar(); return Token(tokenType_asterisk, m_column, m_line); }
@@ -214,6 +215,9 @@ private :
 		else if(*m_ptr == '}') { eatChar(); return Token(tokenType_blockEnd, m_column, m_line); }
 		else if(*m_ptr == '[') { eatChar(); return Token(tokenType_lsqBracket, m_column, m_line); }
 		else if(*m_ptr == ']') { eatChar(); return Token(tokenType_rsqBracket, m_column, m_line); }
+		else if(*m_ptr == ';') { eatChar(); return Token(tokenType_semicolon, m_column, m_line); }
+		else if(*m_ptr == '.') { eatChar(); return Token(tokenType_dot, m_column, m_line); }
+		else if(*m_ptr == ',') { eatChar(); return Token(tokenType_comma, m_column, m_line); }
 		else if(isdigit(*m_ptr))
 		{
 			// This should be a number.
@@ -394,21 +398,10 @@ struct AstArrayIndexing : public AstNode
 	AstNode* index = nullptr; // The node that we are going to evaluate to obtain the index.
 };
 
-enum BinOp : int
-{
-	binop_add,
-	binop_sub,
-	binop_mul,
-	binop_div,
-	binop_equals,
-	binop_notEquals,
-	binop_less,
-	binop_greater,
-};
-
+// A binary operation line  x + y, x * y and so on.
 struct AstBinOp : public AstNode
 {
-	AstBinOp(const BinOp op, AstNode* const left, AstNode* const right, Location location) 
+	AstBinOp(const TokenType op, AstNode* const left, AstNode* const right, Location location) 
 		: AstNode(astNodeType_binop, location)
 		, op(op)
 		, left(left)
@@ -417,19 +410,20 @@ struct AstBinOp : public AstNode
 
 	AstNode* left;
 	AstNode* right;
-	BinOp op;
+	TokenType op; // The token type of the operation.
 };
 
+// Unary operation like !x, -x, +x,
 struct AstUnOp : public AstNode
 {
-	AstUnOp(char op, AstNode* left, Location location) 
+	AstUnOp(TokenType op, AstNode* left, Location location) 
 		: AstNode(astNodeType_unop, location)
 		, op(op)
 		, left(left)
 	{}
 
 	AstNode* left = nullptr;
-	char op; // + -
+	TokenType op; // The type of the token for the speciified operation. ! + - are allowed.
 };
 
 struct AstAssign : public AstNode
@@ -524,32 +518,12 @@ struct Parser
 	const Token* m_token = nullptr;
 	std::unordered_map<int, AstFnDecl*> m_fnIdx2fn;
 
-	std::vector<Error> m_errors;
-
-	bool hasErrors() const {
-		return !m_errors.empty();
-	}
-
-	void reportError(Error e) {
-		m_errors.emplace_back(std::move(e));
-	}
-
-	void reportError(const Location& loc, const char* const fmt, ...) {
-		va_list args;
-		va_start(args, fmt);
-		char msg[1024] = { 0 };
-		snprintf(msg, sizeof(msg), fmt, args);
-		va_end(args);
-		reportError({loc, msg});
-	}
-
 	void registerFunction(AstFnDecl* const fnDecl) {
 		fnDecl->fnIdx = m_fnIdx2fn.size();
 		m_fnIdx2fn[m_fnIdx2fn.size()] = fnDecl;
 	}
 
-	void parse()
-	{
+	void parse() {
 		root = parse_programRoot();
 	}
 
@@ -563,8 +537,7 @@ struct Parser
 				if(node) {
 					stmntList->m_statements.push_back(node);
 				} else {
-					reportError(m_token->location, "Failed to parse a statement");
-					assert(false);
+					ThrowError(m_token->location, "Failed to parse a statement");
 					break;
 				}
 			}
@@ -599,7 +572,8 @@ struct Parser
 			AstNode* ifNode = parse_expression_if();
 
 			if(ifNode == nullptr) {
-				reportError(m_token->location, "failed to parse if expression");
+				ThrowError(m_token->location, "Failed to parse if expression");
+				return nullptr;
 			}
 
 			return ifNode;
@@ -645,7 +619,7 @@ struct Parser
 			return expr;
 		}
 
-		assert(false);
+		ThrowError(m_token->location, "Failed to parse single statement");
 		return nullptr;
 	}
 
@@ -659,7 +633,7 @@ struct Parser
 				progRoot->m_statements.push_back(node);
 			}
 			else {
-				assert(false);
+				ThrowError(Location(), "Unknown error while parsing the program");
 				break;
 			}
 		}
@@ -681,7 +655,8 @@ struct Parser
 			AstIf* const astIf = new AstIf(match(tokenType_if)->location);
 			astIf->expression = parse_expression();
 			if(astIf->expression == nullptr) {
-				reportError(m_token->location, "Failed to parse if condition expression");
+				ThrowError(m_token->location, "Failed to parse if condition expression");
+				return nullptr;
 			}
 
 			astIf->trueBranchStatement = parse_statement_block();
@@ -694,8 +669,7 @@ struct Parser
 			return astIf;
 		}
 
-		reportError(m_token->location, "Expected if token");
-
+		ThrowError(m_token->location, "Expected if token");
 		return nullptr;
 	}
 
@@ -741,14 +715,13 @@ struct Parser
 				memberInitExpr = parse_expression();
 
 				if(!memberInitExpr) {
-					assert(false);
+					ThrowError(m_token->location, "Failed to parse for loop init expression");
 					return nullptr;
 				}	
 
 				match(tokenType_semicolon);
 			} else {
-				reportError(m_token->location, "Expected an identifier for member initialization when creating a table");
-				assert(false);
+				ThrowError(m_token->location, "Expected an identifier for member initialization when creating a table");
 				return nullptr;
 			}
 		}
@@ -773,7 +746,7 @@ struct Parser
 				match(tokenType_blockEnd);
 				break;
 			} else {
-				reportError(m_token->location, "Expected }");
+				ThrowError(m_token->location, "Expected }");
 				return nullptr;
 			}
 		}
@@ -824,8 +797,7 @@ struct Parser
 
 		//
 		if(left == nullptr) {
-			reportError(m_token->location, "Unknown expression");
-			assert(false);
+			ThrowError(m_token->location, "Unknown expression");
 			return nullptr;
 		}
 
@@ -844,7 +816,7 @@ struct Parser
 					if(arg) {
 						fnCall->callArgs.push_back(arg);
 					} else {
-						assert(false);
+						ThrowError(m_token->location, "Failed to parse function call argument");
 						return nullptr;
 					}
 				}
@@ -882,22 +854,23 @@ struct Parser
 		if(m_token->type == tokenType_minus)
 		{
 			match(tokenType_minus);
-			AstUnOp* const result =  new AstUnOp('-', parse_expression0(), tokenLoc);
+			AstUnOp* const result =  new AstUnOp(tokenType_minus, parse_expression0(), tokenLoc);
 			return result;
 		}
 		else if(m_token->type == tokenType_plus)
 		{
 			match(tokenType_plus);
-			AstUnOp* const result =  new AstUnOp('+', parse_expression0(), tokenLoc);
+			AstUnOp* const result =  new AstUnOp(tokenType_plus, parse_expression0(), tokenLoc);
 			return result;
 		}
-		else
+		else if(m_token->type == tokenType_not)
 		{
-			return parse_expression0();
+			match(tokenType_not);
+			AstUnOp* const result =  new AstUnOp(tokenType_not, parse_expression0(), tokenLoc);
+			return result;
 		}
 
-		assert(false);
-		return nullptr;
+		return parse_expression0();
 	}
 
 	AstNode* parse_expression2()
@@ -908,13 +881,13 @@ struct Parser
 		if(m_token->type == tokenType_asterisk)
 		{
 			match(tokenType_asterisk);
-			AstNode* retval = new AstBinOp(binop_mul, left, parse_expression2(), tokenLoc);
+			AstNode* retval = new AstBinOp(tokenType_asterisk, left, parse_expression2(), tokenLoc);
 			return retval;
 		}
 		else if(m_token->type == tokenType_slash)
 		{
 			match(tokenType_slash);
-			AstNode* retval = new AstBinOp(binop_div, left, parse_expression2(), tokenLoc);
+			AstNode* retval = new AstBinOp(tokenType_slash, left, parse_expression2(), tokenLoc);
 			return retval;
 		}
 
@@ -929,13 +902,13 @@ struct Parser
 		if(m_token->type == tokenType_plus)
 		{
 			match(tokenType_plus);
-			AstNode* retval = new AstBinOp(binop_add, left, parse_expression(), tokenLoc);
+			AstNode* retval = new AstBinOp(tokenType_plus, left, parse_expression(), tokenLoc);
 			return retval;
 		}
 		else if(m_token->type == tokenType_minus)
 		{
 			match(tokenType_minus);
-			AstNode* retval = new AstBinOp(binop_sub, left, parse_expression(), tokenLoc);
+			AstNode* retval = new AstBinOp(tokenType_minus, left, parse_expression(), tokenLoc);
 			return retval;
 		}
 
@@ -944,19 +917,31 @@ struct Parser
 
 	AstNode* parse_expression4()
 	{
-		AstNode* left = parse_expression3();
+		AstNode* const left = parse_expression3();
 
 		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_equals)
 		{
 			match(tokenType_equals);
-			AstBinOp* equals = new AstBinOp(binop_equals, left, parse_expression(), tokenLoc);
+			AstBinOp* equals = new AstBinOp(tokenType_equals, left, parse_expression(), tokenLoc);
 			return equals;
 		} 
 		else if(m_token->type == tokenType_notEquals)
 		{
 			match(tokenType_notEquals);
-			AstBinOp* equals = new AstBinOp(binop_notEquals, left, parse_expression(), tokenLoc);
+			AstBinOp* equals = new AstBinOp(tokenType_notEquals, left, parse_expression(), tokenLoc);
+			return equals;
+		}
+		else if(m_token->type == tokenType_lessEquals)
+		{
+			match(tokenType_lessEquals);
+			AstBinOp* equals = new AstBinOp(tokenType_lessEquals, left, parse_expression(), tokenLoc);
+			return equals;
+		}
+		else if(m_token->type == tokenType_greaterEquals)
+		{
+			match(tokenType_greaterEquals);
+			AstBinOp* equals = new AstBinOp(tokenType_greaterEquals, left, parse_expression(), tokenLoc);
 			return equals;
 		}
 
@@ -965,19 +950,19 @@ struct Parser
 
 	AstNode* parse_expression5()
 	{
-		AstNode* left = parse_expression4();
+		AstNode* const left = parse_expression4();
 
 		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_less)
 		{
 			match(tokenType_less);
-			AstBinOp* equals = new AstBinOp(binop_less, left, parse_expression(), tokenLoc);
+			AstBinOp* equals = new AstBinOp(tokenType_less, left, parse_expression(), tokenLoc);
 			return equals;
 		}
 		else if(m_token->type == tokenType_greater)
 		{
 			match(tokenType_greater);
-			AstBinOp* equals = new AstBinOp(binop_greater, left, parse_expression(), tokenLoc);
+			AstBinOp* equals = new AstBinOp(tokenType_greater, left, parse_expression(), tokenLoc);
 			return equals;
 		}
 
@@ -986,7 +971,7 @@ struct Parser
 
 	AstNode* parse_expression6()
 	{
-		AstNode* left = parse_expression5();
+		AstNode* const left = parse_expression5();
 
 		const Location tokenLoc = m_token->location;
 		if(m_token->type == tokenType_assign)
@@ -1146,7 +1131,9 @@ struct Executor
 
 	void popScope()
 	{
-		assert(m_scopeStack.empty() == false);
+		if(m_scopeStack.empty()) {
+			ThrowError(Location(), "Internal Error: Wrong scope pop");
+		}
 		m_scopeStack.pop_back();
 	}
 
@@ -1250,7 +1237,7 @@ struct Executor
 				Var* const left = evaluate(n->left, ctx);
 
 				if(left->m_varType != varType_table || !left->m_tableLUT) {
-					assert(false);
+					ThrowError(n->location, "Only tables have members");
 					return nullptr;
 				}
 
@@ -1267,7 +1254,10 @@ struct Executor
 					member = itr->second;
 				}
 				
-				assert(member != nullptr);
+				if(member == nullptr) {
+					ThrowError(n->location, "Acessing missing member");
+				}
+
 				return member;
 			}break;
 			case astNodeType_tableMaker:
@@ -1300,17 +1290,19 @@ struct Executor
 
 				if(left->m_varType == varType_f32 && right->m_varType == varType_f32)
 				{
-					if(n->op == binop_add) return newVariableFloat(left->m_value_f32 + right->m_value_f32);
-					else if(n->op == binop_sub) return newVariableFloat(left->m_value_f32 - right->m_value_f32);
-					else if(n->op == binop_mul) return newVariableFloat(left->m_value_f32 * right->m_value_f32);
-					else if(n->op == binop_div) return newVariableFloat(left->m_value_f32 / right->m_value_f32);
-					else if(n->op == binop_equals) return newVariableFloat(left->m_value_f32 == right->m_value_f32);
-					else if(n->op == binop_notEquals) return newVariableFloat(left->m_value_f32 != right->m_value_f32);
-					else if(n->op == binop_less) return newVariableFloat(left->m_value_f32 < right->m_value_f32);
-					else if(n->op == binop_greater) return newVariableFloat(left->m_value_f32 > right->m_value_f32);
-					
+					if(n->op == tokenType_plus) return newVariableFloat(left->m_value_f32 + right->m_value_f32);
+					else if(n->op == tokenType_minus) return newVariableFloat(left->m_value_f32 - right->m_value_f32);
+					else if(n->op == tokenType_asterisk) return newVariableFloat(left->m_value_f32 * right->m_value_f32);
+					else if(n->op == tokenType_slash) return newVariableFloat(left->m_value_f32 / right->m_value_f32);
+					else if(n->op == tokenType_equals) return newVariableFloat(left->m_value_f32 == right->m_value_f32);
+					else if(n->op == tokenType_notEquals) return newVariableFloat(left->m_value_f32 != right->m_value_f32);
+					else if(n->op == tokenType_lessEquals) return newVariableFloat(left->m_value_f32 <= right->m_value_f32);
+					else if(n->op == tokenType_greaterEquals) return newVariableFloat(left->m_value_f32 >= right->m_value_f32);
+					else if(n->op == tokenType_less) return newVariableFloat(left->m_value_f32 < right->m_value_f32);
+					else if(n->op == tokenType_greater) return newVariableFloat(left->m_value_f32 > right->m_value_f32);
 				}
-				if(left->m_varType == varType_string && n->op == binop_add)
+
+				if(left->m_varType == varType_string && n->op == tokenType_plus)
 				{
 					// string + string
 					if(right->m_varType == varType_string) {
@@ -1322,7 +1314,7 @@ struct Executor
 						return newVariableString(left->m_value_string + ss.str());
 					}
 				}
-				else if(right->m_varType == varType_string && n->op == binop_add)
+				else if(right->m_varType == varType_string && n->op == tokenType_plus)
 				{
 					// string + string
 					if(left->m_varType == varType_string) {
@@ -1335,10 +1327,9 @@ struct Executor
 						return newVariableString(reult);
 					}
 				}
-
+				
 				// Unknown operation.
-				assert(false);
-				return nullptr;
+				ThrowError(n->location, "Uknown binary operation");
 			}break;
 			case astNodeType_unop:
 			{
@@ -1346,11 +1337,15 @@ struct Executor
 				const Var* const left = evaluate(n->left, ctx);
 
 				if(left->m_varType != varType_f32) {
-					assert(false);
-					return nullptr;
+					ThrowError(n->location, "Expected a number variable");
 				}
 
-				const float v = n->op == '-' ?  -left->m_value_f32 : left->m_value_f32;
+				float v = 0.f;
+				if(n->op == tokenType_minus) v = -left->m_value_f32;
+				else if(n->op == tokenType_plus) v = left->m_value_f32;
+				else if(n->op == tokenType_not) v = left->m_value_f32 ? 0.f : 1.f;
+				else ThrowError(n->location, "Unknown unary operation!");
+
 				return newVariableFloat(v);
 
 			}break;
@@ -1383,7 +1378,7 @@ struct Executor
 
 						// Validate that the number of arguments is correct.
 						if(argValues.size() != fnToCallDecl->argsNames.size()) {
-							assert(false);
+							ThrowError(n->location, "Wrong number of arguments specified to a function call");
 							return nullptr;
 						}
 
@@ -1424,14 +1419,13 @@ struct Executor
 						if(fn->m_fnNative(arguments.size(), arguments.data(), this, &result)) {
 							return result;
 						} else {
-							assert(false);
+							ThrowError(n->location, "Failed on native function call");
 							return nullptr;
 						}
 					}
 				}
 				
-
-				assert(false);
+				ThrowError(n->location, "Uknown function call");
 				return nullptr;
 			}break;
 			case astNodeType_arrayIndexing:
@@ -1445,17 +1439,17 @@ struct Executor
 					if(varIndex && varIndex->m_varType == varType_f32) {
 						const int idx = (int)varIndex->m_value_f32;
 						if(idx < 0 || idx >= (*array->m_arrayValues).size()) {
-							assert(false);
+							ThrowError(n->location, "Out of bounds array indexing");
 							return nullptr;
 						}
 						return (*array->m_arrayValues)[idx];
 					} else {
-						assert(false);
+						ThrowError(n->location, "Array index must be a number");
 						return nullptr;
 					}
 				}
 
-				assert(false);
+				ThrowError(n->location, "Only arrays can be indexed");
 				return nullptr;
 			}break;
 			case astNodeType_statementList:
@@ -1546,7 +1540,7 @@ struct Executor
 			}break;
 		}
 
-		assert(false);
+		ThrowError(root->location, "Uknown AST operation");
 		return nullptr;
 	}
 
@@ -1563,7 +1557,7 @@ private :
 			if(argv[0]->m_arrayValues) {
 				fSize = argv[0]->m_arrayValues->size();
 			}else{
-				assert(false); // Should never happen.
+				ThrowError(Location(), "Internal Error: Uninitialized array");
 			}
 
 			*ppResultVariable = exec->newVariableFloat(fSize);
