@@ -685,6 +685,10 @@ struct Parser
 			while(m_token->type == tokenType_identifier) {
 				fnDecl->argsNames.push_back(m_token->strData);
 				match(tokenType_identifier);
+
+				if(m_token->type == tokenType_comma) {
+					match(tokenType_comma);
+				}
 			}
 			match(tokenType_rparen);
 		}
@@ -742,14 +746,12 @@ struct Parser
 
 			if(m_token->type == tokenType_comma) {
 				match(tokenType_comma);
-			} else if(m_token->type == tokenType_blockEnd) {
-				match(tokenType_blockEnd);
-				break;
 			} else {
 				ThrowError(m_token->location, "Expected }");
 				return nullptr;
 			}
 		}
+		match(tokenType_blockEnd);
 
 		return result;
 	}
@@ -1306,6 +1308,11 @@ struct Executor
 					else if(n->op == tokenType_greater) return newVariableFloat(left->m_value_f32 > right->m_value_f32);
 				}
 
+				if(left->m_varType == varType_string && right->m_varType == varType_string)
+				{
+					if(n->op == tokenType_equals) return newVariableFloat(left->m_value_string == right->m_value_string);
+				}
+
 				if(left->m_varType == varType_string && n->op == tokenType_plus)
 				{
 					// string + string
@@ -1616,54 +1623,133 @@ public :
 	std::vector<std::string> m_scopeStack;
 }; 
 
-int main(int argc, const char* argv[])
+///
+///
+///
+
+#define OLC_PGE_APPLICATION
+#include "olcPixelGameEngine.h"
+
+#include <algorithm>
+#undef min
+#undef max
+
+struct Game* g_game;
+struct Game : public olc::PixelGameEngine
 {
-	if(argc <= 1) {
-		return 0;
+	Parser p;
+	Executor e;
+
+	olc::Sprite *spritePlayer = nullptr;
+
+	Game()
+	{
+		sAppName = "Game TinyScript";
 	}
 
-	// Read the contents of the specified file.
-	std::vector<char> fileContents;
+	bool OnUserCreate() override
 	{
-		FILE* f = fopen(argv[1], "rb");
-		if (f != nullptr) {
-			fseek(f, 0, SEEK_END);
-			const size_t fsize = ftell(f);
-			fseek(f, 0, SEEK_SET);
-			fileContents.resize(fsize);
-			fread(fileContents.data(), 1, fsize, f);
-			fclose(f);
+		spritePlayer = new olc::Sprite("player.png");
 
-			fileContents.push_back('\0');
+		// Read the contents of the specified file.
+		std::vector<char> fileContents;
+		{
+			FILE* f = fopen("game.ts", "rb");
+			if (f != nullptr) {
+				fseek(f, 0, SEEK_END);
+				const size_t fsize = ftell(f);
+				fseek(f, 0, SEEK_SET);
+				fileContents.resize(fsize);
+				fread(fileContents.data(), 1, fsize, f);
+				fclose(f);
+
+				fileContents.push_back('\0');
+			}
 		}
+
+		try 
+		{
+			std ::vector<Token> tokens;
+
+			Lexer lexer;
+			lexer.getAllTokens(fileContents.data(), tokens);
+
+			p.m_token = tokens.data();
+
+			p.parse();
+			AstNode* root = p.root;
+
+			NativeFnPtr const getXMoveInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+
+				float f = 0.f;
+				f -= !!g_game->GetKey(olc::LEFT).bHeld;
+				f += !!g_game->GetKey(olc::RIGHT).bHeld;
+
+				*ppResultVariable = exec->newVariableFloat(f);
+				return 1;
+			};
+
+			e.newVariableNativeFunction("getXMoveInput", getXMoveInput);
+
+			e.parser = &p;
+			Executor::EvalCtx ctx;
+			e.evaluate(root, ctx);
+
+			AstFnCall fnCall(Location(0,0));
+
+			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("initGame", false, false)->m_fnIdx];
+			Executor::EvalCtx ctx2;
+			e.evaluate(&fnCall, ctx2);
+
+		}
+		catch(Error& e)
+		{
+			printf("Error at %d, %d:\n\t%s", e.location.line, e.location.column, e.message.c_str());
+		}
+		catch(...)
+		{
+			printf("Unknown error");
+		}
+
+
+		return true;
 	}
 
-	try 
+	bool OnUserUpdate(float fElapsedTime) override
 	{
-		std ::vector<Token> tokens;
+		SetPixelMode(olc::Pixel::NORMAL);
+		Clear(olc::DARK_CYAN);
 
-		Lexer lexer;
-		lexer.getAllTokens(fileContents.data(), tokens);
-	
-		Parser p;
-		p.m_token = tokens.data();
+		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
 
-		p.parse();
-		AstNode* root = p.root;
+		// Call update.
+		e.findVariableInScope("g_dt", false, false)->m_value_f32 = fElapsedTime;
 
-		Executor e;
-		e.parser = &p;
-		Executor::EvalCtx ctx;
-		e.evaluate(root, ctx);
+		AstFnCall fnCall(Location(0,0));
+
+		fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("updateGame", false, false)->m_fnIdx];
+		Executor::EvalCtx ctx2;
+		e.evaluate(&fnCall, ctx2);
+
+		for(int t = 0; t < tsAllGameObjects->m_arrayValues->size(); ++t) {
+			const Var* const tsObj = (*tsAllGameObjects->m_arrayValues)[t];
+
+			const float x = tsObj->m_tableLUT->at("x")->m_value_f32;
+			const float y = tsObj->m_tableLUT->at("y")->m_value_f32;
+
+			SetPixelMode(olc::Pixel::ALPHA);
+			DrawSprite(x, y, spritePlayer, 1);
+		}
+
+		return true;
 	}
-	catch(Error& e)
-	{
-		printf("Error at %d, %d:\n\t%s", e.location.line, e.location.column, e.message.c_str());
-	}
-	catch(...)
-	{
-		printf("Unknown error");
-	}
+};
+
+int main()
+{
+	g_game = new Game;
+	if (g_game->Construct(400, 400, 2, 2))
+		g_game->Start();
 
 	system("pause");
 
