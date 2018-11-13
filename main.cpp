@@ -819,6 +819,10 @@ struct Parser
 						ThrowError(m_token->location, "Failed to parse function call argument");
 						return nullptr;
 					}
+
+					if(m_token->type == tokenType_comma) {
+						match(tokenType_comma);
+					}
 				}
 				match(tokenType_rparen);
 
@@ -1565,8 +1569,45 @@ private :
 		};
 
 		newVariableNativeFunction("array_size", array_size);
+	
+		NativeFnPtr const array_pop = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+			if(argc != 1 || argv[0] == nullptr|| argv[0]->m_varType != varType_array) {
+				return 0;
+			}
+
+			if(argv[0]->m_arrayValues) {
+				if(argv[0]->m_arrayValues->empty() == false) {
+					argv[0]->m_arrayValues->pop_back();
+				}
+			}else{
+				ThrowError(Location(), "Internal Error: Uninitialized array");
+			}
+
+			return 1;
+		};
+	
+		newVariableNativeFunction("array_pop", array_pop);
+
+		NativeFnPtr const array_push = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+			if(argc != 2 || argv[0] == nullptr|| argv[0]->m_varType != varType_array) {
+				return 0;
+			}
+
+			if(argv[0]->m_arrayValues) {
+				argv[0]->m_arrayValues->push_back(argv[1]);
+			}else{
+				ThrowError(Location(), "Internal Error: Uninitialized array");
+			}
+
+			return 1;
+		};
+
+		newVariableNativeFunction("array_push", array_push);
+
 	}
 	
+	
+
 public :
 
 	Parser* parser = nullptr;
