@@ -1748,10 +1748,9 @@ struct Game : public olc::PixelGameEngine
 int main()
 {
 	g_game = new Game;
-	if (g_game->Construct(400, 400, 2, 2))
+	if(g_game->Construct(400, 400, 2, 2)) {
 		g_game->Start();
-
-	system("pause");
+	}
 
 	return 0;
 }
