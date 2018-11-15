@@ -77,7 +77,8 @@ updateGame = fn() {
 			obj.y = obj.y + g_dt * 200.0;
 
 			if obj.y > 464 {
-				obj.y = -64;
+				obj.y = -64 - getRandomNmbr() * 32;
+				obj.x = obj.radius*2 + (400 - obj.radius*2) * getRandomNmbr();
 			}
 		}
 
