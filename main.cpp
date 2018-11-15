@@ -1017,15 +1017,15 @@ typedef int (*NativeFnPtr)(int argc, Var* argv[], Executor* exec, Var** ppResult
 
 struct Var
 {
-	Var(VarType const varType)
+	Var(VarType const varType = varType_undefined)
 		: m_varType(varType)
 	{
 		if(varType == varType_table) {
-			m_tableLUT = std::make_shared<std::unordered_map<std::string, Var*>>();
+			m_tableLUT = std::make_shared<std::unordered_map<std::string, Var>>();
 		}
 
 		if(varType == varType_array) {
-			m_arrayValues = std::make_shared<std::vector<Var*>>();
+			m_arrayValues = std::make_shared<std::vector<Var>>();
 		}
 	}
 
@@ -1070,8 +1070,8 @@ public :
 	int m_fnIdx = -1;
 	NativeFnPtr m_fnNative = nullptr;
 	std::string m_value_string;
-	std::shared_ptr<std::unordered_map<std::string, Var*>> m_tableLUT; // member name ot variable
-	std::shared_ptr<std::vector<Var*>> m_arrayValues; // member name ot variable
+	std::shared_ptr<std::unordered_map<std::string, Var>> m_tableLUT; // member name ot variable
+	std::shared_ptr<std::vector<Var>> m_arrayValues; // member name ot variable
 };
 
 void printVariable(const Var* const expr)
@@ -1089,7 +1089,7 @@ void printVariable(const Var* const expr)
 		for(auto& pair : *expr->m_tableLUT)
 		{
 			printf("%s = ", pair.first.c_str());
-			printVariable(pair.second);
+			printVariable(&pair.second);
 			
 		}
 		printf(" }\n");
@@ -1098,9 +1098,9 @@ void printVariable(const Var* const expr)
 	{
 		printf("[ \n");
 		if(expr->m_arrayValues)
-			for(const Var* const var : *expr->m_arrayValues)
+			for(const Var& var : *expr->m_arrayValues)
 			{
-				printVariable(var);
+				printVariable(&var);
 			}
 		printf(" ]\n");
 	}
@@ -1247,24 +1247,19 @@ struct Executor
 					return nullptr;
 				}
 
-				Var* member = nullptr;
+				Var member;
 
 				auto itr = (*left->m_tableLUT).find(n->memberName);
 				if(itr == std::end(*left->m_tableLUT))
 				{
-					member = newVariableRaw(nullptr, varType_undefined);
-					(*left->m_tableLUT)[n->memberName] = member;
+					(*left->m_tableLUT)[n->memberName] = Var();
+					return &(*left->m_tableLUT)[n->memberName];
 				}
 				else
 				{
-					member = itr->second;
+					return &itr->second;
 				}
 				
-				if(member == nullptr) {
-					ThrowError(n->location, "Acessing missing member");
-				}
-
-				return member;
 			}break;
 			case astNodeType_tableMaker:
 			{
@@ -1272,7 +1267,7 @@ struct Executor
 				Var* result = newVariableRaw(nullptr, varType_table);
 				for(const auto& pair : n->memberToExpression)
 				{
-					(*result->m_tableLUT)[pair.first] = evaluate(pair.second, ctx);
+					(*result->m_tableLUT)[pair.first] = *evaluate(pair.second, ctx);
 				}
 
 				return result;
@@ -1283,7 +1278,8 @@ struct Executor
 				Var* result = newVariableRaw(nullptr, varType_array);
 				for(const AstNode* const expr : n->arrayElements)
 				{
-					(*result->m_arrayValues).push_back(evaluate(expr, ctx));
+					 ;
+					(*result->m_arrayValues).push_back(*evaluate(expr, ctx));
 				}
 
 				return result;
@@ -1453,7 +1449,7 @@ struct Executor
 							ThrowError(n->location, "Out of bounds array indexing");
 							return nullptr;
 						}
-						return (*array->m_arrayValues)[idx];
+						return &(*array->m_arrayValues)[idx];
 					} else {
 						ThrowError(n->location, "Array index must be a number");
 						return nullptr;
@@ -1578,16 +1574,29 @@ private :
 		newVariableNativeFunction("array_size", array_size);
 	
 		NativeFnPtr const array_pop = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-			if(argc != 1 || argv[0] == nullptr|| argv[0]->m_varType != varType_array) {
+			if(argv[0] == nullptr|| argv[0]->m_varType != varType_array)
 				return 0;
-			}
+			
+			if(argc == 1)
+			{
 
-			if(argv[0]->m_arrayValues) {
-				if(argv[0]->m_arrayValues->empty() == false) {
-					argv[0]->m_arrayValues->pop_back();
+				if(argv[0]->m_arrayValues) {
+					if(argv[0]->m_arrayValues->empty() == false) {
+						argv[0]->m_arrayValues->pop_back();
+					}
+				}else{
+					ThrowError(Location(), "Internal Error: Uninitialized array");
 				}
-			}else{
-				ThrowError(Location(), "Internal Error: Uninitialized array");
+			}
+			if(argc == 2)
+			{
+				if(argv[0]->m_arrayValues) {
+					if(argv[0]->m_arrayValues->empty() == false) {
+						argv[0]->m_arrayValues->erase(argv[0]->m_arrayValues->begin() + (int)argv[1]->m_value_f32);
+					}
+				}else{
+					ThrowError(Location(), "Internal Error: Uninitialized array");
+				}
 			}
 
 			return 1;
@@ -1601,7 +1610,7 @@ private :
 			}
 
 			if(argv[0]->m_arrayValues) {
-				argv[0]->m_arrayValues->push_back(argv[1]);
+				argv[0]->m_arrayValues->push_back(*argv[1]);
 			}else{
 				ThrowError(Location(), "Internal Error: Uninitialized array");
 			}
@@ -1641,6 +1650,9 @@ struct Game : public olc::PixelGameEngine
 	Executor e;
 
 	olc::Sprite *spritePlayer = nullptr;
+	olc::Sprite *spriteEnemy = nullptr;
+	olc::Sprite *spriteProjectile = nullptr;
+
 
 	Game()
 	{
@@ -1650,6 +1662,8 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserCreate() override
 	{
 		spritePlayer = new olc::Sprite("player.png");
+		spriteEnemy = new olc::Sprite("enemy.png");
+		spriteProjectile = new olc::Sprite("projectile.png");
 
 		// Read the contents of the specified file.
 		std::vector<char> fileContents;
@@ -1679,6 +1693,14 @@ struct Game : public olc::PixelGameEngine
 			p.parse();
 			AstNode* root = p.root;
 
+			NativeFnPtr const getRandomNmbr = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+				*ppResultVariable = exec->newVariableFloat((float)(rand() % 1000) / 1000.f);
+				return 1;
+			};
+
+			e.newVariableNativeFunction("getRandomNmbr", getRandomNmbr);
+
+
 			NativeFnPtr const getXMoveInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
 
 				float f = 0.f;
@@ -1690,6 +1712,14 @@ struct Game : public olc::PixelGameEngine
 			};
 
 			e.newVariableNativeFunction("getXMoveInput", getXMoveInput);
+
+
+			NativeFnPtr const isFireBtnPressed = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+				*ppResultVariable = exec->newVariableFloat(!!g_game->GetKey(olc::Q).bPressed);
+				return 1;
+			};
+
+			e.newVariableNativeFunction("isFireBtnPressed", isFireBtnPressed);
 
 			e.parser = &p;
 			Executor::EvalCtx ctx;
@@ -1732,25 +1762,85 @@ struct Game : public olc::PixelGameEngine
 		e.evaluate(&fnCall, ctx2);
 
 		for(int t = 0; t < tsAllGameObjects->m_arrayValues->size(); ++t) {
-			const Var* const tsObj = (*tsAllGameObjects->m_arrayValues)[t];
+			Var& tsObj = (*tsAllGameObjects->m_arrayValues)[t];
 
-			const float x = tsObj->m_tableLUT->at("x")->m_value_f32;
-			const float y = tsObj->m_tableLUT->at("y")->m_value_f32;
-
+			const float x = tsObj.m_tableLUT->at("x").m_value_f32;
+			const float y = tsObj.m_tableLUT->at("y").m_value_f32;
+			std::string& type = tsObj.m_tableLUT->at("type").m_value_string;
+			
 			SetPixelMode(olc::Pixel::ALPHA);
-			DrawSprite(x, y, spritePlayer, 1);
+			if(type == "player") DrawSprite(x, y, spritePlayer, 1);
+			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
+			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
+
 		}
 
 		return true;
 	}
 };
 
+#if 1
 int main()
 {
 	g_game = new Game;
-	if(g_game->Construct(400, 400, 2, 2)) {
+	if(g_game->Construct(400, 400, 1, 1)) {
 		g_game->Start();
 	}
 
 	return 0;
 }
+#else
+int main(int argc, const char* argv[])
+{
+	if(argc <= 1) {
+		return 0;
+	}
+
+	// Read the contents of the specified file.
+	std::vector<char> fileContents;
+	{
+		FILE* f = fopen(argv[1], "rb");
+		if (f != nullptr) {
+			fseek(f, 0, SEEK_END);
+			const size_t fsize = ftell(f);
+			fseek(f, 0, SEEK_SET);
+			fileContents.resize(fsize);
+			fread(fileContents.data(), 1, fsize, f);
+			fclose(f);
+
+			fileContents.push_back('\0');
+		}
+	}
+
+	try 
+	{
+		std ::vector<Token> tokens;
+
+		Lexer lexer;
+		lexer.getAllTokens(fileContents.data(), tokens);
+
+		Parser p;
+		p.m_token = tokens.data();
+
+		p.parse();
+		AstNode* root = p.root;
+
+		Executor e;
+		e.parser = &p;
+		Executor::EvalCtx ctx;
+		e.evaluate(root, ctx);
+	}
+	catch(Error& e)
+	{
+		printf("Error at %d, %d:\n\t%s", e.location.line, e.location.column, e.message.c_str());
+	}
+	catch(...)
+	{
+		printf("Unknown error");
+	}
+
+	system("pause");
+
+	return 0;
+}
+#endif
