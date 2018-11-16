@@ -1748,7 +1748,17 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserUpdate(float fElapsedTime) override
 	{
 		SetPixelMode(olc::Pixel::NORMAL);
-		Clear(olc::DARK_CYAN);
+	//	Clear(olc::DARK_CYAN);
+
+		for(int h = 0; h < GetDrawTargetHeight(); h++)
+		{
+			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
+			for(int w = 0; w < GetDrawTargetWidth(); w++)
+			{
+				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(k * 18.f, k*28.f, k*45.f);
+			}
+		}
+		
 
 		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
 

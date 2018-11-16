@@ -34,6 +34,7 @@ makeEnemy = fn(x, y) {
 		x = x;
 		y = y;
 		radius = 16;
+		speed = getRandomNmbr() * 100 + 150;
 	};
 	g_nextId = g_nextId + 1;
 	return r;
@@ -74,7 +75,7 @@ updateGame = fn() {
 		}
 
 		if obj.type == "enemy" {
-			obj.y = obj.y + g_dt * 200.0;
+			obj.y = obj.y + g_dt * obj.speed;
 
 			if obj.y > 464 {
 				obj.y = -64 - getRandomNmbr() * 32;
