@@ -157,11 +157,19 @@ private :
 			// No more tokes to process, this should be it!
 			return Token(tokenType_endToken, m_column, m_line);
 		}
+		else if(m_ptr[0] == '/' && m_ptr[1] == '/')
+		{
+			eatChar(); eatChar();
+			while(*m_ptr != '\0' && *m_ptr != '\n') {
+				eatChar();
+			}
+			return getNextToken();
+		}
 		else if(isalpha(*m_ptr) || *m_ptr == '_')
 		{
 			// This should be an indentifier or a keyword.
 			Token token;
-			while(isalpha(*m_ptr) || *m_ptr == '_' || isdigit(*m_ptr)) {
+			while(*m_ptr != '\0' && isalpha(*m_ptr) || *m_ptr == '_' || isdigit(*m_ptr)) {
 				token.strData.push_back(*m_ptr);
 				eatChar();
 			}
@@ -189,7 +197,7 @@ private :
 			token.type = tokenType_string;
 
 			eatChar();
-			while(*m_ptr!='"') {
+			while(*m_ptr != '\0' && *m_ptr!='"') {
 				token.strData.push_back(*m_ptr);
 				eatChar();
 			}
@@ -1693,11 +1701,18 @@ struct Game : public olc::PixelGameEngine
 			p.parse();
 			AstNode* root = p.root;
 
+			//
+			NativeFnPtr const sin = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+				*ppResultVariable = exec->newVariableFloat(sinf(argv[0]->m_value_f32));
+				return 1;
+			};
+			e.newVariableNativeFunction("sin", sin);
+
+			//
 			NativeFnPtr const getRandomNmbr = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
 				*ppResultVariable = exec->newVariableFloat((float)(rand() % 1000) / 1000.f);
 				return 1;
 			};
-
 			e.newVariableNativeFunction("getRandomNmbr", getRandomNmbr);
 
 
@@ -1712,6 +1727,18 @@ struct Game : public olc::PixelGameEngine
 			};
 
 			e.newVariableNativeFunction("getXMoveInput", getXMoveInput);
+
+			NativeFnPtr const getYMoveInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+
+				float f = 0.f;
+				f -= !!g_game->GetKey(olc::UP).bHeld;
+				f += !!g_game->GetKey(olc::DOWN).bHeld;
+
+				*ppResultVariable = exec->newVariableFloat(f);
+				return 1;
+			};
+
+			e.newVariableNativeFunction("getYMoveInput", getYMoveInput);
 
 
 			NativeFnPtr const isFireBtnPressed = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
@@ -1748,7 +1775,6 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserUpdate(float fElapsedTime) override
 	{
 		SetPixelMode(olc::Pixel::NORMAL);
-	//	Clear(olc::DARK_CYAN);
 
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
 		{
@@ -1778,10 +1804,13 @@ struct Game : public olc::PixelGameEngine
 			const float y = tsObj.m_tableLUT->at("y").m_value_f32;
 			std::string& type = tsObj.m_tableLUT->at("type").m_value_string;
 			
-			SetPixelMode(olc::Pixel::ALPHA);
-			if(type == "player") DrawSprite(x, y, spritePlayer, 1);
+			SetPixelMode(olc::Pixel::MASK);
+			if(type == "player") {
+				float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
+				DrawSprite(x, y + sin(recoil * recoil * 3.14f) * 15, spritePlayer, 2);
+			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
-			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
+			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
 
 		}
 
@@ -1793,7 +1822,7 @@ struct Game : public olc::PixelGameEngine
 int main()
 {
 	g_game = new Game;
-	if(g_game->Construct(400, 400, 1, 1)) {
+	if(g_game->Construct(800, 800, 1, 1)) {
 		g_game->Start();
 	}
 
