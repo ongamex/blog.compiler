@@ -124,24 +124,26 @@ updateGame = fn() {
 				obj.y = 800 - obj.radius*2;
 			}
 
-			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
-				enemy = g_allGameObjects[e];
-				if enemy.type == "enemy" {
+			if 0 {
+				for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
+					enemy = g_allGameObjects[e];
+					if enemy.type == "enemy" {
 
-					ex = enemy.x;
-					ey = enemy.y;
+						ex = enemy.x;
+						ey = enemy.y;
 
-					dx = ex - obj.x;
-					dy = ey - obj.y;
+						dx = ex - obj.x;
+						dy = ey - obj.y;
 
-					d2 = dx*dx + dy*dy;
-					r2 = (obj.radius + enemy.radius) * (obj.radius + enemy.radius);
+						d2 = dx*dx + dy*dy;
+						r2 = (obj.radius + enemy.radius) * (obj.radius + enemy.radius);
 
-					if d2 < r2 {
-						array_push(id2del, obj.id);
+						if d2 < r2 {
+							array_push(id2del, obj.id);
 
-						enemy.x = enemy.radius*2 + (800 - enemy.radius*2) * getRandomNmbr();
-						enemy.y = -enemy.radius*2;
+							enemy.x = enemy.radius*2 + (800 - enemy.radius*2) * getRandomNmbr();
+							enemy.y = -enemy.radius*2;
+						}
 					}
 				}
 			}

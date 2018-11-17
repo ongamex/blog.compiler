@@ -1658,8 +1658,11 @@ struct Game : public olc::PixelGameEngine
 	Executor e;
 
 	olc::Sprite *spritePlayer = nullptr;
+	olc::Sprite *spriteFlame = nullptr;
 	olc::Sprite *spriteEnemy = nullptr;
+	//olc::Sprite *spriteEnemyBig = nullptr;
 	olc::Sprite *spriteProjectile = nullptr;
+	float globalTime = 0.f;
 
 
 	Game()
@@ -1670,7 +1673,9 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserCreate() override
 	{
 		spritePlayer = new olc::Sprite("player.png");
+		spriteFlame = new olc::Sprite("flame.png");
 		spriteEnemy = new olc::Sprite("enemy.png");
+		//spriteEnemyBig = new olc::Sprite("enemyBig.png");
 		spriteProjectile = new olc::Sprite("projectile.png");
 
 		// Read the contents of the specified file.
@@ -1774,6 +1779,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+		globalTime += fElapsedTime;
 		SetPixelMode(olc::Pixel::NORMAL);
 
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
@@ -1781,7 +1787,12 @@ struct Game : public olc::PixelGameEngine
 			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
 			for(int w = 0; w < GetDrawTargetWidth(); w++)
 			{
-				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(k * 18.f, k*28.f, k*45.f);
+				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(
+					(1.f - k)*0x23 + k * 0x07,
+					(1.f - k)*0x3c + k * 0x2e,
+					(1.f - k)*0x69 + k * 0x2e);
+					
+					
 			}
 		}
 		
@@ -1807,10 +1818,16 @@ struct Game : public olc::PixelGameEngine
 			SetPixelMode(olc::Pixel::MASK);
 			if(type == "player") {
 				float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
-				DrawSprite(x, y + sin(recoil * recoil * 3.14f) * 15, spritePlayer, 2);
+				float px = x;
+				float py = y + sin(recoil * recoil * 3.14f) * 15;
+				DrawSprite(px, py, spritePlayer, 1);
+				if(GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld) {
+					if(sinf(globalTime * 6.28f * 10) > 0.5)
+						DrawSprite(px, py + 96, spriteFlame);
+				}
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
-			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
+			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
 
 		}
 
