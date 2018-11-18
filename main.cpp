@@ -1821,13 +1821,13 @@ struct Game : public olc::PixelGameEngine
 				float px = x;
 				float py = y + sin(recoil * recoil * 3.14f) * 15;
 				DrawSprite(px, py, spritePlayer, 1);
-				if(GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld) {
+				if( /* GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || */ GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld) {
 					if(sinf(globalTime * 6.28f * 10) > 0.5)
 						DrawSprite(px, py + 96, spriteFlame);
 				}
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
-			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
+			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
 
 		}
 
