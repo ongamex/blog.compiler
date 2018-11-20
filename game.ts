@@ -289,7 +289,7 @@ updateGame = fn() {
 
 		// Explosions.
 		if obj.type == "explosion" {
-			if obj.progress > 0.150 {
+			if obj.progress > 0.125 {
 				array_push(id2del, obj.id);
 			}
 
