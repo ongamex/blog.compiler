@@ -1816,19 +1816,15 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserUpdate(float fElapsedTime) override
 	{
 		globalTime += fElapsedTime;
-		SetPixelMode(olc::Pixel::NORMAL);
+		
 
+		// Clear the screen.
+		SetPixelMode(olc::Pixel::NORMAL);
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
 		{
 			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
-			for(int w = 0; w < GetDrawTargetWidth(); w++)
-			{
-				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(
-					(1.f - k)*0x23 + k * 0x07,
-					(1.f - k)*0x3c + k * 0x2e,
-					(1.f - k)*0x69 + k * 0x2e);
-					
-					
+			for(int w = 0; w < GetDrawTargetWidth(); w++) {
+				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel((1.f - k)*0x23 + k * 0x07, (1.f - k)*0x3c + k * 0x2e, (1.f - k)*0x69 + k * 0x2e);				
 			}
 		}
 
@@ -1843,14 +1839,27 @@ struct Game : public olc::PixelGameEngine
 
 		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
 
+		//
+		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
+
+		// Restart the game if needed.
+		if(isGameOver && (GetKey(olc::Q).bHeld || GetMouse(0).bHeld)) {
+			AstFnCall fnCall(Location(0,0));
+			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("initGame", false, false)->m_fnIdx];
+			Executor::EvalCtx ctx2;
+			e.evaluate(&fnCall, ctx2);
+			isGameOver = false;
+		}
+
 		// Call update.
 		e.findVariableInScope("g_dt", false, false)->m_value_f32 = fElapsedTime;
 
-		AstFnCall fnCall(Location(0,0));
-
-		fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("updateGame", false, false)->m_fnIdx];
-		Executor::EvalCtx ctx2;
-		e.evaluate(&fnCall, ctx2);
+		{
+			AstFnCall fnCall(Location(0,0));
+			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("updateGame", false, false)->m_fnIdx];
+			Executor::EvalCtx ctx2;
+			e.evaluate(&fnCall, ctx2);
+		}
 
 		for(int t = 0; t < tsAllGameObjects->m_arrayValues->size(); ++t) {
 			Var& tsObj = (*tsAllGameObjects->m_arrayValues)[t];
@@ -1861,9 +1870,9 @@ struct Game : public olc::PixelGameEngine
 			
 			SetPixelMode(olc::Pixel::MASK);
 			if(type == "player") {
-				float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
-				float px = x;
-				float py = y + sin(recoil * recoil * 3.14f) * 15;
+				const float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
+				const float px = x;
+				const float py = y + sin(recoil * recoil * 3.14f) * 15;
 				DrawSprite(px, py, spritePlayer, 1);
 				if(y != prevPlayerYPos) {
 					if(sinf(globalTime * 6.28f * 10.f) > 0.5f) {
@@ -1886,6 +1895,10 @@ struct Game : public olc::PixelGameEngine
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
 			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
 
+		}
+
+		if(isGameOver) {
+			DrawSprite(200, 200, spriteGameOver);
 		}
 
 		return true;
