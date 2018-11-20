@@ -1665,7 +1665,7 @@ struct Game : public olc::PixelGameEngine
 	//olc::Sprite *spriteEnemyBig = nullptr;
 	olc::Sprite *spriteProjectile = nullptr;
 	olc::Sprite *spritePowerUp = nullptr;
-	olc::Sprite *spritesExplosion[5] = { nullptr };
+	olc::Sprite *spritesExplosion[4][5] = { nullptr };
 
 	float globalTime = 0.f;
 	float prevPlayerYPos = 0.f; // The y coord position of the player on the previous frame, used to display the flame of the engine.
@@ -1686,11 +1686,29 @@ struct Game : public olc::PixelGameEngine
 		spriteProjectile = new olc::Sprite("art/projectile.png");
 		spritePowerUp = new olc::Sprite("art/powerUp.png");
 
-		spritesExplosion[0] = new olc::Sprite("art/enemyExplosion1.png");
-		spritesExplosion[1] = new olc::Sprite("art/enemyExplosion2.png");
-		spritesExplosion[2] = new olc::Sprite("art/enemyExplosion3.png");
-		spritesExplosion[3] = new olc::Sprite("art/enemyExplosion4.png");
-		spritesExplosion[4] = new olc::Sprite("art/enemyExplosion5.png");
+		spritesExplosion[0][0] = new olc::Sprite("art/enemyExplosion1-1.png");
+		spritesExplosion[0][1] = new olc::Sprite("art/enemyExplosion1-2.png");
+		spritesExplosion[0][2] = new olc::Sprite("art/enemyExplosion1-3.png");
+		spritesExplosion[0][3] = new olc::Sprite("art/enemyExplosion1-4.png");
+		spritesExplosion[0][4] = new olc::Sprite("art/enemyExplosion1-5.png");
+
+		spritesExplosion[1][0] = new olc::Sprite("art/enemyExplosion2-1.png");
+		spritesExplosion[1][1] = new olc::Sprite("art/enemyExplosion2-2.png");
+		spritesExplosion[1][2] = new olc::Sprite("art/enemyExplosion2-3.png");
+		spritesExplosion[1][3] = new olc::Sprite("art/enemyExplosion2-4.png");
+		spritesExplosion[1][4] = new olc::Sprite("art/enemyExplosion2-5.png");
+
+		spritesExplosion[2][0] = new olc::Sprite("art/enemyExplosion3-1.png");
+		spritesExplosion[2][1] = new olc::Sprite("art/enemyExplosion3-2.png");
+		spritesExplosion[2][2] = new olc::Sprite("art/enemyExplosion3-3.png");
+		spritesExplosion[2][3] = new olc::Sprite("art/enemyExplosion3-4.png");
+		spritesExplosion[2][4] = new olc::Sprite("art/enemyExplosion3-5.png");
+
+		spritesExplosion[3][0] = new olc::Sprite("art/enemyExplosion4-1.png");
+		spritesExplosion[3][1] = new olc::Sprite("art/enemyExplosion4-2.png");
+		spritesExplosion[3][2] = new olc::Sprite("art/enemyExplosion4-3.png");
+		spritesExplosion[3][3] = new olc::Sprite("art/enemyExplosion4-4.png");
+		spritesExplosion[3][4] = new olc::Sprite("art/enemyExplosion4-5.png");
 
 		// Read the contents of the specified file.
 		std::vector<char> fileContents;
@@ -1884,12 +1902,15 @@ struct Game : public olc::PixelGameEngine
 			}
 			if(type == "explosion")
 			{
+				// Pick the sprite sheet for the explosion based on the index.
+				const int sheetIndex = (int)(tsObj.m_tableLUT->at("id").m_value_f32) % 4;
+
 				const float duration = 0.150f;
 				const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
 				int frame = (progress / duration) * 4;
 				if(frame > 4) frame = 4;
 
-				DrawSprite(x, y, spritesExplosion[frame]);
+				DrawSprite(x, y, spritesExplosion[sheetIndex][frame]);
 
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);

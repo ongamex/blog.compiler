@@ -26,7 +26,7 @@ makePlayer = fn(x, y) {
 		radius = 64;
 		health = 3;
 		recoil = 0;
-		gunLevel = 0;
+		gunLevel = 1;
 
 	};
 	g_player = r;
@@ -109,13 +109,13 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
 	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
 
-	//array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
-	//array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
-	//array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
-	//array_push(g_allGameObjects, makeEnemy(400 - 32, -32));
-	//array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
-	//array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
-	//array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
+	array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(400 - 32, -32));
+	array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
+	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
 
 	array_push(g_allGameObjects, makeEnemy(200 - 32, -132));
 	array_push(g_allGameObjects, makeEnemy(400 - 32, -132));
