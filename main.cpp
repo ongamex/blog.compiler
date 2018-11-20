@@ -1664,8 +1664,9 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spriteEnemy = nullptr;
 	//olc::Sprite *spriteEnemyBig = nullptr;
 	olc::Sprite *spriteProjectile = nullptr;
-	olc::Sprite *spritesExplosion[8] = { nullptr };
-	olc::Sprite *spritesExplosionSmall[8] = { nullptr };
+	olc::Sprite *spritePowerUp = nullptr;
+	olc::Sprite *spritesExplosion[5] = { nullptr };
+
 	float globalTime = 0.f;
 	float prevPlayerYPos = 0.f; // The y coord position of the player on the previous frame, used to display the flame of the engine.
 
@@ -1683,15 +1684,13 @@ struct Game : public olc::PixelGameEngine
 		spriteEnemy = new olc::Sprite("art/enemy.png");
 		//spriteEnemyBig = new olc::Sprite("art/enemyBig.png");
 		spriteProjectile = new olc::Sprite("art/projectile.png");
+		spritePowerUp = new olc::Sprite("art/powerUp.png");
 
-		spritesExplosion[0] = new olc::Sprite("art/explosion0.png");
-		spritesExplosion[1] = new olc::Sprite("art/explosion1.png");
-		spritesExplosion[2] = new olc::Sprite("art/explosion2.png");
-		spritesExplosion[3] = new olc::Sprite("art/explosion3.png");
-		spritesExplosion[4] = new olc::Sprite("art/explosion4.png");
-		spritesExplosion[5] = new olc::Sprite("art/explosion5.png");
-		spritesExplosion[6] = new olc::Sprite("art/explosion6.png");
-		spritesExplosion[7] = new olc::Sprite("art/explosion7.png");
+		spritesExplosion[0] = new olc::Sprite("art/enemyExplosion1.png");
+		spritesExplosion[1] = new olc::Sprite("art/enemyExplosion2.png");
+		spritesExplosion[2] = new olc::Sprite("art/enemyExplosion3.png");
+		spritesExplosion[3] = new olc::Sprite("art/enemyExplosion4.png");
+		spritesExplosion[4] = new olc::Sprite("art/enemyExplosion5.png");
 
 		// Read the contents of the specified file.
 		std::vector<char> fileContents;
@@ -1730,7 +1729,8 @@ struct Game : public olc::PixelGameEngine
 
 			//
 			NativeFnPtr const getRandomNmbr = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat((float)(rand() % 1000) / 1000.f);
+				float res = (float)(rand() % 10000) / 10000.f;
+				*ppResultVariable = exec->newVariableFloat(res);
 				return 1;
 			};
 			e.newVariableNativeFunction("getRandomNmbr", getRandomNmbr);
@@ -1884,16 +1884,18 @@ struct Game : public olc::PixelGameEngine
 			}
 			if(type == "explosion")
 			{
-				const float duration = 0.25f;
+				const float duration = 0.150f;
 				const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
-				int frame = (progress / duration) * 7;
-				if(frame > 7) frame = 7;
+				int frame = (progress / duration) * 4;
+				if(frame > 4) frame = 4;
 
 				DrawSprite(x, y, spritesExplosion[frame]);
 
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
 			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
+			if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 2);
+
 
 		}
 
