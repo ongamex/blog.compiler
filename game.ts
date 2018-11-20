@@ -50,10 +50,32 @@ makeProjectle = fn(x, y) {
 };
 
 
+makeExplosion = fn(x, y) {
+	r = {
+		id = g_nextId;
+		type = "explosion";
+		x = x;
+		y = y;
+		radius = 256;
+		progress = 0;
+	};
+	g_nextId = g_nextId + 1;
+	return r;
+};
+
 
 
 initGame = fn() {
 	array_push(g_allGameObjects, makePlayer(400 - 32, 640));
+
+	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
+	array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(400 - 32, -32));
+	array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
+	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
+
 	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
 	array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
 	array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
@@ -77,8 +99,14 @@ updateGame = fn() {
 	for t = 0; t < array_size(g_allGameObjects); t = t + 1 {
 		obj = g_allGameObjects[t];
 		if obj.type == "player" {
-			obj.x = obj.x + g_dt * getXMoveInput() * 400.0;
-			obj.y = obj.y + g_dt * getYMoveInput() * 400.0;
+			
+			if shouldUseMouseForInput() {
+				obj.x = getMouseX() - obj.radius;
+				obj.y = getMouseY() - obj.radius;
+			} else {
+				obj.x = obj.x + g_dt * getXMoveInput() * 400.0;
+				obj.y = obj.y + g_dt * getYMoveInput() * 400.0;
+			}
 
 			if isFireBtnPressed() {
 				if 0 {
@@ -186,6 +214,7 @@ updateGame = fn() {
 
 					if d2 < r2 {
 						array_push(id2del, obj.id);
+						array_push(g_allGameObjects, makeExplosion(ex - 128, ey - 128));
 
 						enemy.x = enemy.radius*2 + (800 - enemy.radius*2) * getRandomNmbr();
 						enemy.y = -enemy.radius*2;
@@ -196,6 +225,14 @@ updateGame = fn() {
 			if obj.y < -obj.radius {
 				array_push(id2del, obj.id);
 			}
+		}
+
+		if obj.type == "explosion" {
+			if obj.progress > 0.25 {
+				array_push(id2del, obj.id);
+			}
+
+			obj.progress = obj.progress + g_dt;
 		}
 	}
 

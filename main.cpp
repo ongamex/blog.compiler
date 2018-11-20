@@ -1657,12 +1657,16 @@ struct Game : public olc::PixelGameEngine
 	Parser p;
 	Executor e;
 
+	bool preferMouseForShipControl = false;
 	olc::Sprite *spritePlayer = nullptr;
 	olc::Sprite *spriteFlame = nullptr;
 	olc::Sprite *spriteEnemy = nullptr;
 	//olc::Sprite *spriteEnemyBig = nullptr;
 	olc::Sprite *spriteProjectile = nullptr;
+	olc::Sprite *spritesExplosion[8] = { nullptr };
+	olc::Sprite *spritesExplosionSmall[8] = { nullptr };
 	float globalTime = 0.f;
+	float prevPlayerYPos = 0.f; // The y coord position of the player on the previous frame, used to display the flame of the engine.
 
 
 	Game()
@@ -1677,6 +1681,15 @@ struct Game : public olc::PixelGameEngine
 		spriteEnemy = new olc::Sprite("enemy.png");
 		//spriteEnemyBig = new olc::Sprite("enemyBig.png");
 		spriteProjectile = new olc::Sprite("projectile.png");
+
+		spritesExplosion[0] = new olc::Sprite("explosion0.png");
+		spritesExplosion[1] = new olc::Sprite("explosion1.png");
+		spritesExplosion[2] = new olc::Sprite("explosion2.png");
+		spritesExplosion[3] = new olc::Sprite("explosion3.png");
+		spritesExplosion[4] = new olc::Sprite("explosion4.png");
+		spritesExplosion[5] = new olc::Sprite("explosion5.png");
+		spritesExplosion[6] = new olc::Sprite("explosion6.png");
+		spritesExplosion[7] = new olc::Sprite("explosion7.png");
 
 		// Read the contents of the specified file.
 		std::vector<char> fileContents;
@@ -1745,9 +1758,30 @@ struct Game : public olc::PixelGameEngine
 
 			e.newVariableNativeFunction("getYMoveInput", getYMoveInput);
 
+			NativeFnPtr const shouldUseMouseForInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+				*ppResultVariable = exec->newVariableFloat(!!g_game->preferMouseForShipControl);
+				return 1;
+			};
+
+			e.newVariableNativeFunction("shouldUseMouseForInput", shouldUseMouseForInput);
+
+			NativeFnPtr const getMouseX = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+				*ppResultVariable = exec->newVariableFloat(g_game->GetMouseX());
+				return 1;
+			};
+
+			e.newVariableNativeFunction("getMouseX", getMouseX);
+
+			NativeFnPtr const getMouseY = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
+				*ppResultVariable = exec->newVariableFloat(g_game->GetMouseY());
+				return 1;
+			};
+
+			e.newVariableNativeFunction("getMouseY", getMouseY);
+
 
 			NativeFnPtr const isFireBtnPressed = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(!!g_game->GetKey(olc::Q).bPressed);
+				*ppResultVariable = exec->newVariableFloat(g_game->GetKey(olc::Q).bPressed || g_game->GetMouse(0).bPressed);
 				return 1;
 			};
 
@@ -1795,6 +1829,14 @@ struct Game : public olc::PixelGameEngine
 					
 			}
 		}
+
+		if(GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld || GetKey(olc::Q).bHeld) {
+			preferMouseForShipControl = false;
+		}
+
+		if(GetMouse(0).bHeld) {
+			preferMouseForShipControl = true;
+		}
 		
 
 		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
@@ -1821,10 +1863,23 @@ struct Game : public olc::PixelGameEngine
 				float px = x;
 				float py = y + sin(recoil * recoil * 3.14f) * 15;
 				DrawSprite(px, py, spritePlayer, 1);
-				if( /* GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || */ GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld) {
-					if(sinf(globalTime * 6.28f * 10) > 0.5)
+				if(y != prevPlayerYPos) {
+					if(sinf(globalTime * 6.28f * 10.f) > 0.5f) {
 						DrawSprite(px, py + 96, spriteFlame);
+					}
 				}
+
+				prevPlayerYPos = y;
+			}
+			if(type == "explosion")
+			{
+				const float duration = 0.25f;
+				const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
+				int frame = (progress / duration) * 7;
+				if(frame > 7) frame = 7;
+
+				DrawSprite(x, y, spritesExplosion[frame]);
+
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
 			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
