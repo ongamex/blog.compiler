@@ -1676,20 +1676,20 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserCreate() override
 	{
-		spritePlayer = new olc::Sprite("player.png");
-		spriteFlame = new olc::Sprite("flame.png");
-		spriteEnemy = new olc::Sprite("enemy.png");
-		//spriteEnemyBig = new olc::Sprite("enemyBig.png");
-		spriteProjectile = new olc::Sprite("projectile.png");
+		spritePlayer = new olc::Sprite("art/player.png");
+		spriteFlame = new olc::Sprite("art/flame.png");
+		spriteEnemy = new olc::Sprite("art/enemy.png");
+		//spriteEnemyBig = new olc::Sprite("art/enemyBig.png");
+		spriteProjectile = new olc::Sprite("art/projectile.png");
 
-		spritesExplosion[0] = new olc::Sprite("explosion0.png");
-		spritesExplosion[1] = new olc::Sprite("explosion1.png");
-		spritesExplosion[2] = new olc::Sprite("explosion2.png");
-		spritesExplosion[3] = new olc::Sprite("explosion3.png");
-		spritesExplosion[4] = new olc::Sprite("explosion4.png");
-		spritesExplosion[5] = new olc::Sprite("explosion5.png");
-		spritesExplosion[6] = new olc::Sprite("explosion6.png");
-		spritesExplosion[7] = new olc::Sprite("explosion7.png");
+		spritesExplosion[0] = new olc::Sprite("art/explosion0.png");
+		spritesExplosion[1] = new olc::Sprite("art/explosion1.png");
+		spritesExplosion[2] = new olc::Sprite("art/explosion2.png");
+		spritesExplosion[3] = new olc::Sprite("art/explosion3.png");
+		spritesExplosion[4] = new olc::Sprite("art/explosion4.png");
+		spritesExplosion[5] = new olc::Sprite("art/explosion5.png");
+		spritesExplosion[6] = new olc::Sprite("art/explosion6.png");
+		spritesExplosion[7] = new olc::Sprite("art/explosion7.png");
 
 		// Read the contents of the specified file.
 		std::vector<char> fileContents;
