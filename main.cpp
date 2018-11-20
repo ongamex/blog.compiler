@@ -243,6 +243,7 @@ private :
 				while(isdigit(*m_ptr)){
 					const int digit = *m_ptr - '0';
 					numberAccum += mult * float(digit);
+					mult *= 0.1f;
 					eatChar();
 				}
 			}
@@ -1905,7 +1906,7 @@ struct Game : public olc::PixelGameEngine
 				// Pick the sprite sheet for the explosion based on the index.
 				const int sheetIndex = (int)(tsObj.m_tableLUT->at("id").m_value_f32) % 4;
 
-				const float duration = 0.125f;
+				const float duration = 0.250f;
 				const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
 				int frame = (progress / duration) * 4;
 				if(frame > 4) frame = 4;

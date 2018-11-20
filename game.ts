@@ -26,7 +26,7 @@ makePlayer = fn(x, y) {
 		radius = 64;
 		health = 3;
 		recoil = 0;
-		gunLevel = 1;
+		gunLevel = 0;
 
 	};
 	g_player = r;
@@ -257,7 +257,7 @@ updateGame = fn() {
 						enemy.y = -enemy.radius*2;
 
 						// Chance to spawn a power up.
-						if getRandomNmbr() >= 0.9 {
+						if getRandomNmbr() >= 0.975 {
 							array_push(g_allGameObjects, makePowerUp(ex, ey));
 						}
 					}
@@ -289,7 +289,7 @@ updateGame = fn() {
 
 		// Explosions.
 		if obj.type == "explosion" {
-			if obj.progress > 0.125 {
+			if obj.progress > 0.250 {
 				array_push(id2del, obj.id);
 			}
 
