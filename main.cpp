@@ -1658,6 +1658,7 @@ struct Game : public olc::PixelGameEngine
 	Executor e;
 
 	bool preferMouseForShipControl = false;
+	olc::Sprite *spriteGameOver = nullptr;
 	olc::Sprite *spritePlayer = nullptr;
 	olc::Sprite *spriteFlame = nullptr;
 	olc::Sprite *spriteEnemy = nullptr;
@@ -1676,6 +1677,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserCreate() override
 	{
+		spriteGameOver = new olc::Sprite("art/gameOver.png");
 		spritePlayer = new olc::Sprite("art/player.png");
 		spriteFlame = new olc::Sprite("art/flame.png");
 		spriteEnemy = new olc::Sprite("art/enemy.png");

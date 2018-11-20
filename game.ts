@@ -1,8 +1,21 @@
-g_dt = 0.0;
+//-----------------------------------------------------
+// Globals for the game.
+//------------------------------------------------------
 g_allGameObjects = array{};
 g_nextId = 0;
-g_player = {};
 
+//------------------------------------------------------
+// Globals updated by the so called "engine".
+//------------------------------------------------------
+g_dt = 0.0;
+
+//------------------------------------------------------
+//
+//------------------------------------------------------
+
+//------------------------------------------------------
+// Game objects definitions.
+//------------------------------------------------------
 makePlayer = fn(x, y) {
 	r = {
 		id = g_nextId;
@@ -14,7 +27,6 @@ makePlayer = fn(x, y) {
 		recoil = 0;
 
 	};
-	g_player = r;
 	g_nextId = g_nextId + 1;
 	return r;
 };
@@ -49,7 +61,6 @@ makeProjectle = fn(x, y) {
 	return r;
 };
 
-
 makeExplosion = fn(x, y) {
 	r = {
 		id = g_nextId;
@@ -63,9 +74,14 @@ makeExplosion = fn(x, y) {
 	return r;
 };
 
-
-
+//------------------------------------------------------
+// Called once at the begining of the game to initialize
+// everything to it's defaults.
+//------------------------------------------------------
 initGame = fn() {
+	g_allGameObjects = array{};
+	g_nextId = 0;
+
 	array_push(g_allGameObjects, makePlayer(400 - 32, 640));
 
 	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
@@ -93,6 +109,9 @@ initGame = fn() {
 	//array_push(g_allGameObjects, makeEnemy(700 - 32, -164));
 };
 
+//------------------------------------------------------
+// The update function called every frame.
+//------------------------------------------------------
 updateGame = fn() {
 	id2del = array{};
 
