@@ -48,10 +48,30 @@ makeEnemy = fn(x, y) {
 		x = x;
 		y = y;
 		radius = 32;
+		health = 1;
+		hitCooldown = 0;
 		speed = getRandomNmbr() * 200 + 150;
 		phase = getRandomNmbr() * 100;
 		phaseSpeed = getRandomNmbr()*3.0  + 1.0;
 		phaseMag = getRandomNmbr() * 1.2;
+	};
+	g_nextId = g_nextId + 1;
+	return r;
+};
+
+makeEnemyBig = fn(x, y) {
+	r = {
+		id = g_nextId;
+		type = "enemyBig";
+		x = x;
+		y = y;
+		radius = 35;
+		health = 3;
+		hitCooldown = 0;
+		speed = getRandomNmbr() * 100 + 50;
+		phase = 50 + getRandomNmbr() * 100;
+		phaseSpeed = getRandomNmbr()*3.0  + 1.0;
+		phaseMag = getRandomNmbr() * 2.6;
 		shootTimer = 0;
 	};
 	g_nextId = g_nextId + 1;
@@ -125,23 +145,23 @@ initGame = fn() {
 	array_push(g_allGameObjects, makePlayer(g_screenWidth * 0.5, g_screenHeight * 0.8));
 
 	array_push(g_allGameObjects, makeEnemy(100, -64));
-	array_push(g_allGameObjects, makeEnemy(200, -32));
+	array_push(g_allGameObjects, makeEnemyBig(200, -32));
 	array_push(g_allGameObjects, makeEnemy(300, -64));
-	array_push(g_allGameObjects, makeEnemy(400, -32));
+	array_push(g_allGameObjects, makeEnemyBig(400, -32));
 	array_push(g_allGameObjects, makeEnemy(500, -64));
-	array_push(g_allGameObjects, makeEnemy(600, -32));
+	array_push(g_allGameObjects, makeEnemyBig(600, -32));
 	array_push(g_allGameObjects, makeEnemy(700, -64));
 	
-	array_push(g_allGameObjects, makeEnemy(100, -64));
+	array_push(g_allGameObjects, makeEnemyBig(100, -64));
 	array_push(g_allGameObjects, makeEnemy(200, -32));
-	array_push(g_allGameObjects, makeEnemy(300, -64));
+	array_push(g_allGameObjects, makeEnemyBig(300, -64));
 	array_push(g_allGameObjects, makeEnemy(400, -32));
-	array_push(g_allGameObjects, makeEnemy(500, -64));
+	array_push(g_allGameObjects, makeEnemyBig(500, -64));
 	array_push(g_allGameObjects, makeEnemy(600, -32));
-	array_push(g_allGameObjects, makeEnemy(700, -64));
+	array_push(g_allGameObjects, makeEnemyBig(700, -64));
 	
 	array_push(g_allGameObjects, makeEnemy(200, -132));
-	array_push(g_allGameObjects, makeEnemy(400, -132));
+	array_push(g_allGameObjects, makeEnemyBig(400, -132));
 	array_push(g_allGameObjects, makeEnemy(600, -132));
 };
 
@@ -239,16 +259,7 @@ updateGame = fn() {
 			// If so apply damage to it.
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
 				enemy = g_allGameObjects[e];
-				if enemy.type == "enemy" {
-					if doCollide(obj, enemy) {
-						// Kill the player.
-						array_push(id2del, obj.id);
-						array_push(g_allGameObjects, makeExplosion(obj.x, obj.y));
-						g_isGameOver = 1;
-					}
-				}
-
-				if enemy.type == "enemyProjectile" {
+				if (enemy.type == "enemy") + (enemy.type == "enemyBig") + (enemy.type == "enemyProjectile") {
 					if doCollide(obj, enemy) {
 						// Kill the player.
 						array_push(id2del, obj.id);
@@ -260,27 +271,30 @@ updateGame = fn() {
 		}
 
 		// Enemy.
-		if obj.type == "enemy" {
+		if (obj.type == "enemy") + (obj.type == "enemyBig") {
 			obj.phase = obj.phase + g_dt;
 			obj.y = obj.y + g_dt * obj.speed;
 			xMovement = sin(obj.phase * obj.phaseSpeed) * obj.phaseMag;
 			obj.x = obj.x + xMovement;
 
-			obj.shootTimer = obj.shootTimer + g_dt;
-			if obj.shootTimer > 1 {
-				obj.shootTimer = 0;
+			obj.hitCooldown = obj.hitCooldown - g_dt;
 
-				shootingChance = 0.05;
+			if obj.type == "enemyBig" {
+				obj.shootTimer = obj.shootTimer + g_dt;
+				if obj.shootTimer > 1 {
+					obj.shootTimer = 0;
 
-				if g_player.gunLevel >= 1 { shootingChance = 0.1; }
-				if g_player.gunLevel >= 2 { shootingChance = 0.125; }
+					shootingChance = 0.1;
+					if g_player.gunLevel >= 1 { shootingChance = 0.15; }
+					if g_player.gunLevel >= 2 { shootingChance = 0.20; }
 
-				if getRandomNmbr() <= shootingChance {
-					array_push(g_allGameObjects, makeEnemyProjectile(obj.x, obj.y, xMovement * 300));
+					if getRandomNmbr() <= shootingChance {
+						array_push(g_allGameObjects, makeEnemyProjectile(obj.x, obj.y, xMovement * 150));
+					}
 				}
 			}
 
-			if obj.y > 928 {
+			if obj.y > g_screenHeight + obj.radius {
 				obj.y = -obj.radius*2 - getRandomNmbr() * obj.radius * 2;
 				obj.x = obj.radius + (g_screenWidth - obj.radius*4) * getRandomNmbr();
 			}
@@ -295,18 +309,26 @@ updateGame = fn() {
 
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
 				enemy = g_allGameObjects[e];
-				if enemy.type == "enemy" {
-					if doCollide(obj, enemy) {
-						// Kill the enemy.
+				if (enemy.type == "enemy") + (enemy.type == "enemyBig") {
+					if doCollide(obj, enemy) * (enemy.hitCooldown <= 0) {
+
 						array_push(id2del, obj.id);
-						array_push(g_allGameObjects, makeExplosion(enemy.x, enemy.y));
 
-						enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
-						enemy.y = -enemy.radius*2;
+						// Drops it's health.
+						enemy.hitCooldown = 0.150;
+						enemy.health = enemy.health - 1;
 
-						// Chance to spawn a power up.
-						if getRandomNmbr() >= 0.975 {
-							array_push(g_allGameObjects, makePowerUp(enemy.x, enemy.y));
+						if enemy.health <= 0 {
+							// Kill the enemy.	
+							array_push(g_allGameObjects, makeExplosion(enemy.x, enemy.y));
+							
+							enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
+							enemy.y = -enemy.radius*2;
+
+							// Chance to spawn a power up.
+							if getRandomNmbr() >= 0.975 {
+								array_push(g_allGameObjects, makePowerUp(enemy.x, enemy.y));
+							}
 						}
 					}
 				}

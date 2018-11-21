@@ -1661,8 +1661,10 @@ struct Game : public olc::PixelGameEngine
 	bool preferMouseForShipControl = false;
 	olc::Sprite *spriteGameOver = nullptr;
 	olc::Sprite *spritePlayer = nullptr;
-	olc::Sprite *spriteFlame = nullptr;
+	olc::Sprite *spriteFlameBig = nullptr;
+	olc::Sprite *spriteFlameSmall = nullptr;
 	olc::Sprite *spriteEnemy = nullptr;
+	olc::Sprite *spriteEnemyBig = nullptr;
 	//olc::Sprite *spriteEnemyBig = nullptr;
 	olc::Sprite *spriteProjectile = nullptr;
 	olc::Sprite *spriteEnemyProjectile = nullptr;
@@ -1680,13 +1682,15 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserCreate() override
 	{
+		spriteEnemyBig = new olc::Sprite("art/alienBig.png");
 		spriteGameOver = new olc::Sprite("art/gameOver.png");
 		spritePlayer = new olc::Sprite("art/player.png");
-		spriteFlame = new olc::Sprite("art/flame.png");
+		spriteFlameBig = new olc::Sprite("art/flameBig.png");
+		spriteFlameSmall = new olc::Sprite("art/flameSmall.png");
 		spriteEnemy = new olc::Sprite("art/enemy.png");
 		//spriteEnemyBig = new olc::Sprite("art/enemyBig.png");
 		spriteProjectile = new olc::Sprite("art/projectile.png");
-		spriteEnemyProjectile = new olc::Sprite("art/enemyProjectile.png");
+		spriteEnemyProjectile = new olc::Sprite("art/shootAliens.png");
 		spritePowerUp = new olc::Sprite("art/powerUp.png");
 
 		spritesExplosion[0][0] = new olc::Sprite("art/enemyExplosion1-1.png");
@@ -1891,22 +1895,22 @@ struct Game : public olc::PixelGameEngine
 
 			std::string& type = tsObj.m_tableLUT->at("type").m_value_string;
 			
-			SetPixelMode(olc::Pixel::MASK);
+			SetPixelMode(olc::Pixel::ALPHA);
 			if(type == "player") {
 				const float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
 				const float px = x;
 				const float py = y + sin(recoil * recoil * 3.14f) * 15;
 				DrawSprite(px, py, spritePlayer, 1);
 
-				if(y != prevPlayerYPos) {
-					if(sinf(globalTime * 6.28f * 10.f) > 0.5f) {
-						DrawSprite(px, py + 96, spriteFlame);
-					}
+				if(sinf(globalTime * 6.28 * 3) > 0.f) {
+					DrawSprite(px, py + 128, spriteFlameBig);
+				} else {
+					DrawSprite(px, py + 128, spriteFlameSmall);
 				}
 
 				prevPlayerYPos = y;
 			}
-			if(type == "explosion")
+			else if(type == "explosion")
 			{
 				// Pick the sprite sheet for the explosion based on the index.
 				const int sheetIndex = (int)(tsObj.m_tableLUT->at("id").m_value_f32) % 4;
@@ -1919,10 +1923,11 @@ struct Game : public olc::PixelGameEngine
 				DrawSprite(x, y, spritesExplosion[sheetIndex][frame]);
 
 			}
-			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
-			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
-			if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, 1);
-			if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
+			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
+			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, 1);
+			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
+			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, 1);
+			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
 
 
 		}
