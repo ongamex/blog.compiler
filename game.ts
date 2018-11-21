@@ -15,6 +15,12 @@ g_dt = 0.0;
 g_isGameOver = 0;
 g_timeSpentDead = 0;
 
+//-----------------------------------------------------
+//
+//-----------------------------------------------------
+g_screenWidth = 800;
+g_screenHeight = 800;
+
 //------------------------------------------------------
 // Game objects definitions.
 //------------------------------------------------------
@@ -57,7 +63,7 @@ makeProjectle = fn(x, y) {
 		type = "projectile";
 		x = x;
 		y = y;
-		radius = 16;
+		radius = 32;
 		speedY = -900;
 		speedX = 0;
 	};
@@ -79,12 +85,13 @@ makePowerUp = fn(x, y) {
 };
 
 makeExplosion = fn(x, y) {
+	radius = 128;
 	r = {
 		id = g_nextId;
 		type = "explosion";
 		x = x;
 		y = y;
-		radius = 256;
+		radius = 128;
 		progress = 0;
 	};
 	g_nextId = g_nextId + 1;
@@ -101,40 +108,59 @@ initGame = fn() {
 	g_allGameObjects = array{};
 	g_nextId = 0;
 
-	array_push(g_allGameObjects, makePlayer(400 - 32, 640));
+	array_push(g_allGameObjects, makePlayer(g_screenWidth * 0.5, g_screenHeight * 0.8));
 
-	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
-	array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
-	array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
-	array_push(g_allGameObjects, makeEnemy(400 - 32, -32));
-	array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
-	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
-	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(100, -64));
+	array_push(g_allGameObjects, makeEnemy(200, -32));
+	array_push(g_allGameObjects, makeEnemy(300, -64));
+	array_push(g_allGameObjects, makeEnemy(400, -32));
+	array_push(g_allGameObjects, makeEnemy(500, -64));
+	array_push(g_allGameObjects, makeEnemy(600, -32));
+	array_push(g_allGameObjects, makeEnemy(700, -64));
 	
-	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
-	array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
-	array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
-	array_push(g_allGameObjects, makeEnemy(400 - 32, -32));
-	array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
-	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
-	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
+	array_push(g_allGameObjects, makeEnemy(100, -64));
+	array_push(g_allGameObjects, makeEnemy(200, -32));
+	array_push(g_allGameObjects, makeEnemy(300, -64));
+	array_push(g_allGameObjects, makeEnemy(400, -32));
+	array_push(g_allGameObjects, makeEnemy(500, -64));
+	array_push(g_allGameObjects, makeEnemy(600, -32));
+	array_push(g_allGameObjects, makeEnemy(700, -64));
 	
-	array_push(g_allGameObjects, makeEnemy(200 - 32, -132));
-	array_push(g_allGameObjects, makeEnemy(400 - 32, -132));
-	array_push(g_allGameObjects, makeEnemy(600 - 32, -132));
+	array_push(g_allGameObjects, makeEnemy(200, -132));
+	array_push(g_allGameObjects, makeEnemy(400, -132));
+	array_push(g_allGameObjects, makeEnemy(600, -132));
 };
 
 //------------------------------------------------------
 //
 //------------------------------------------------------
 doCollide = fn(o1, o2) {
-	dx = o1.x + o1.radius - o2.x + o2.radius;
-	dy = o1.y + o1.radius - o2.y + o2.radius;
+	dx = o1.x - o2.x;
+	dy = o1.y - o2.y;
 
 	d2 = (dx*dx) + (dy*dy);
 	r2 = (o1.radius + o2.radius) * (o1.radius + o2.radius);
 
 	return d2 <= r2;
+};
+
+clampPositionToScreenEdge = fn(obj, xOnly) {
+	if obj.x < obj.radius {
+		obj.x = obj.radius;
+	}
+	
+	if obj.x > g_screenWidth - obj.radius {
+		obj.x = g_screenWidth - obj.radius;
+	}
+
+	if xOnly != 1 {
+		if obj.y < obj.radius {
+			obj.y = obj.radius;
+		}
+		if obj.y > g_screenHeight - obj.radius {
+			obj.y = g_screenHeight - obj.radius;
+		}
+	}
 };
 
 //------------------------------------------------------
@@ -152,8 +178,8 @@ updateGame = fn() {
 		if obj.type == "player" {
 			
 			if shouldUseMouseForInput() {
-				obj.x = getMouseX() - obj.radius;
-				obj.y = getMouseY() - obj.radius;
+				obj.x = getMouseX();
+				obj.y = getMouseY();
 			} else {
 				obj.x = obj.x + g_dt * getXMoveInput() * 400.0;
 				obj.y = obj.y + g_dt * getYMoveInput() * 400.0;
@@ -162,23 +188,23 @@ updateGame = fn() {
 			if isFireBtnPressed() {
 				if obj.gunLevel == 0 {
 					jitter = (getRandomNmbr() * 2 - 1) * 12;
-					prjectile = makeProjectle(obj.x + 48 + jitter, obj.y - 32);
+					prjectile = makeProjectle(obj.x + jitter, obj.y - 32);
 					prjectile.speedX = jitter * 6.3;
 					array_push(g_allGameObjects, prjectile);
 					obj.recoil = 1.0;
 				} else {
 					jitter = (getRandomNmbr() * 2 - 1) * 12;
-					prjectile = makeProjectle(obj.x + 32 + jitter, obj.y - 32);
+					prjectile = makeProjectle(obj.x - 32 + jitter, obj.y - 32);
 					prjectile.speedX = -132;
 					array_push(g_allGameObjects, prjectile);
 
 					if obj.gunLevel > 1 {
-						prjectile = makeProjectle(obj.x + 48 + jitter, obj.y - 32);
+						prjectile = makeProjectle(obj.x + jitter, obj.y - 32);
 						prjectile.speedX = 0;
 						array_push(g_allGameObjects, prjectile);
 					}
 
-					prjectile = makeProjectle(obj.x + 64 + jitter, obj.y - 32);
+					prjectile = makeProjectle(obj.x + 32 + jitter, obj.y - 32);
 					prjectile.speedX = 132;
 					array_push(g_allGameObjects, prjectile);
 
@@ -193,19 +219,7 @@ updateGame = fn() {
 			}
 
 			// Clamp the position to the edges of the screen.
-			if obj.x < 0 {
-				obj.x = 0;
-			}
-			if obj.x > 800 - obj.radius*2 {
-				obj.x = 800 - obj.radius*2;
-			}
-
-			if obj.y < 0 {
-				obj.y = 0;
-			}
-			if obj.y > 800 - obj.radius*2 {
-				obj.y = 800 - obj.radius*2;
-			}
+			clampPositionToScreenEdge(obj, 0);
 
 			// Check if the player ship is coliding with any enemies.
 			// If so apply damage to it.
@@ -229,15 +243,10 @@ updateGame = fn() {
 
 			if obj.y > 928 {
 				obj.y = -obj.radius*2 - getRandomNmbr() * obj.radius * 2;
-				obj.x = obj.radius + (800 - obj.radius*4) * getRandomNmbr();
+				obj.x = obj.radius + (g_screenWidth - obj.radius*4) * getRandomNmbr();
 			}
 
-			if obj.x < 0 {
-				obj.x = 0;
-			}
-			if obj.x > 800 - obj.radius*2 {
-				obj.x = 800 - obj.radius*2;
-			}
+			clampPositionToScreenEdge(obj, 1);
 		}
 
 		// Projectiles spawned by the player.
@@ -254,9 +263,9 @@ updateGame = fn() {
 					if doCollide(obj, enemy) {
 						// Kill the enemy.
 						array_push(id2del, obj.id);
-						array_push(g_allGameObjects, makeExplosion(ex - 75, ey - 75));
+						array_push(g_allGameObjects, makeExplosion(ex, ey));
 
-						enemy.x = enemy.radius*2 + (800 - enemy.radius*2) * getRandomNmbr();
+						enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
 						enemy.y = -enemy.radius*2;
 
 						// Chance to spawn a power up.

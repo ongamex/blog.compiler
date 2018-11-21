@@ -1883,8 +1883,10 @@ struct Game : public olc::PixelGameEngine
 		for(int t = 0; t < tsAllGameObjects->m_arrayValues->size(); ++t) {
 			Var& tsObj = (*tsAllGameObjects->m_arrayValues)[t];
 
-			const float x = tsObj.m_tableLUT->at("x").m_value_f32;
-			const float y = tsObj.m_tableLUT->at("y").m_value_f32;
+			const float radius = tsObj.m_tableLUT->at("radius").m_value_f32;
+			const float x = tsObj.m_tableLUT->at("x").m_value_f32 - radius;
+			const float y = tsObj.m_tableLUT->at("y").m_value_f32 - radius;
+
 			std::string& type = tsObj.m_tableLUT->at("type").m_value_string;
 			
 			SetPixelMode(olc::Pixel::MASK);
