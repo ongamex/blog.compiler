@@ -1847,7 +1847,7 @@ struct Game : public olc::PixelGameEngine
 			}
 		}
 
-		if(GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld || GetKey(olc::Q).bHeld) {
+		if(GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld) {
 			preferMouseForShipControl = false;
 		}
 
@@ -1862,7 +1862,7 @@ struct Game : public olc::PixelGameEngine
 		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
 
 		// Restart the game if needed.
-		if(isGameOver && (GetKey(olc::Q).bHeld || GetMouse(0).bHeld)) {
+		if(isGameOver && (GetKey(olc::Q).bHeld || GetMouse(0).bHeld) && e.findVariableInScope("g_timeSpentDead", false, false)->m_value_f32 > 0.5f) {
 			AstFnCall fnCall(Location(0,0));
 			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("initGame", false, false)->m_fnIdx];
 			Executor::EvalCtx ctx2;
@@ -1916,13 +1916,13 @@ struct Game : public olc::PixelGameEngine
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
 			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
-			if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 2);
+			if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
 
 
 		}
 
 		if(isGameOver) {
-			DrawSprite(200, 200, spriteGameOver);
+			DrawSprite(400 - 314, 150, spriteGameOver);
 		}
 
 		return true;

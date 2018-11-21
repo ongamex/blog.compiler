@@ -13,6 +13,7 @@ g_dt = 0.0;
 // Global that are read by the "engine".
 //------------------------------------------------------
 g_isGameOver = 0;
+g_timeSpentDead = 0;
 
 //------------------------------------------------------
 // Game objects definitions.
@@ -96,6 +97,7 @@ makeExplosion = fn(x, y) {
 //------------------------------------------------------
 initGame = fn() {
 	g_isGameOver = 0;
+	g_timeSpentDead = 0;
 	g_allGameObjects = array{};
 	g_nextId = 0;
 
@@ -108,7 +110,7 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
 	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
 	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
-
+	
 	array_push(g_allGameObjects, makeEnemy(100 - 32, -64));
 	array_push(g_allGameObjects, makeEnemy(200 - 32, -32));
 	array_push(g_allGameObjects, makeEnemy(300 - 32, -64));
@@ -116,10 +118,23 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemy(500 - 32, -64));
 	array_push(g_allGameObjects, makeEnemy(600 - 32, -32));
 	array_push(g_allGameObjects, makeEnemy(700 - 32, -64));
-
+	
 	array_push(g_allGameObjects, makeEnemy(200 - 32, -132));
 	array_push(g_allGameObjects, makeEnemy(400 - 32, -132));
 	array_push(g_allGameObjects, makeEnemy(600 - 32, -132));
+};
+
+//------------------------------------------------------
+//
+//------------------------------------------------------
+doCollide = fn(o1, o2) {
+	dx = o1.x + o1.radius - o2.x + o2.radius;
+	dy = o1.y + o1.radius - o2.y + o2.radius;
+
+	d2 = (dx*dx) + (dy*dy);
+	r2 = (o1.radius + o2.radius) * (o1.radius + o2.radius);
+
+	return d2 <= r2;
 };
 
 //------------------------------------------------------
@@ -157,9 +172,11 @@ updateGame = fn() {
 					prjectile.speedX = -132;
 					array_push(g_allGameObjects, prjectile);
 
-					prjectile = makeProjectle(obj.x + 48 + jitter, obj.y - 32);
-					prjectile.speedX = 0;
-					array_push(g_allGameObjects, prjectile);
+					if obj.gunLevel > 1 {
+						prjectile = makeProjectle(obj.x + 48 + jitter, obj.y - 32);
+						prjectile.speedX = 0;
+						array_push(g_allGameObjects, prjectile);
+					}
 
 					prjectile = makeProjectle(obj.x + 64 + jitter, obj.y - 32);
 					prjectile.speedX = 132;
@@ -195,16 +212,8 @@ updateGame = fn() {
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
 				enemy = g_allGameObjects[e];
 				if enemy.type == "enemy" {
-					ex = enemy.x;
-					ey = enemy.y;
-
-					dx = ex - obj.x;
-					dy = ey - obj.y;
-
-					d2 = dx*dx + dy*dy;
-					r2 = (obj.radius + enemy.radius) * (obj.radius + enemy.radius);
-
-					if d2 < r2 {
+					if doCollide(obj, enemy) {
+						// Kill the player.
 						array_push(id2del, obj.id);
 						g_isGameOver = 1;
 					}
@@ -242,13 +251,7 @@ updateGame = fn() {
 					ex = enemy.x;
 					ey = enemy.y;
 
-					dx = ex - obj.x;
-					dy = ey - obj.y;
-
-					d2 = dx*dx + dy*dy;
-					r2 = (obj.radius + enemy.radius) * (obj.radius + enemy.radius);
-
-					if d2 < r2 {
+					if doCollide(obj, enemy) {
 						// Kill the enemy.
 						array_push(id2del, obj.id);
 						array_push(g_allGameObjects, makeExplosion(ex - 75, ey - 75));
@@ -273,14 +276,7 @@ updateGame = fn() {
 		if obj.type == "powerUp" {
 			obj.y = obj.y + (g_dt * obj.speedY);
 
-
-			dx = obj.x - g_player.x;
-			dy = obj.y - g_player.y;
-
-			d2 = dx*dx + dy*dy;
-			r2 = (obj.radius + g_player.radius) * (obj.radius + g_player.radius);
-
-			if d2 < r2 {
+			if doCollide(obj, g_player) {
 				array_push(id2del, obj.id);
 				g_player.gunLevel = g_player.gunLevel + 1;
 			}
@@ -295,7 +291,10 @@ updateGame = fn() {
 
 			obj.progress = obj.progress + g_dt;
 		}
+	}
 
+	if g_isGameOver {
+		g_timeSpentDead = g_timeSpentDead + g_dt;
 	}
 
 	// Delete all game objects that aren't going to play anymore.
