@@ -1665,6 +1665,7 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spriteEnemy = nullptr;
 	//olc::Sprite *spriteEnemyBig = nullptr;
 	olc::Sprite *spriteProjectile = nullptr;
+	olc::Sprite *spriteEnemyProjectile = nullptr;
 	olc::Sprite *spritePowerUp = nullptr;
 	olc::Sprite *spritesExplosion[4][5] = { nullptr };
 
@@ -1685,6 +1686,7 @@ struct Game : public olc::PixelGameEngine
 		spriteEnemy = new olc::Sprite("art/enemy.png");
 		//spriteEnemyBig = new olc::Sprite("art/enemyBig.png");
 		spriteProjectile = new olc::Sprite("art/projectile.png");
+		spriteEnemyProjectile = new olc::Sprite("art/enemyProjectile.png");
 		spritePowerUp = new olc::Sprite("art/powerUp.png");
 
 		spritesExplosion[0][0] = new olc::Sprite("art/enemyExplosion1-1.png");
@@ -1919,6 +1921,7 @@ struct Game : public olc::PixelGameEngine
 			}
 			if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
 			if(type == "projectile") DrawSprite(x, y, spriteProjectile, 2);
+			if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, 1);
 			if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
 
 

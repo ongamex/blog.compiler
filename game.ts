@@ -52,6 +52,7 @@ makeEnemy = fn(x, y) {
 		phase = getRandomNmbr() * 100;
 		phaseSpeed = getRandomNmbr()*3.0  + 1.0;
 		phaseMag = getRandomNmbr() * 1.2;
+		shootTimer = 0;
 	};
 	g_nextId = g_nextId + 1;
 	return r;
@@ -66,6 +67,20 @@ makeProjectle = fn(x, y) {
 		radius = 32;
 		speedY = -900;
 		speedX = 0;
+	};
+	g_nextId = g_nextId + 1;
+	return r;
+};
+
+makeEnemyProjectile = fn(x, y, speedX) {
+	r = {
+		id = g_nextId;
+		type = "enemyProjectile";
+		x = x;
+		y = y;
+		radius = 16;
+		speedY = 400;
+		speedX = speedX;
 	};
 	g_nextId = g_nextId + 1;
 	return r;
@@ -184,6 +199,9 @@ updateGame = fn() {
 				obj.y = obj.y + g_dt * getYMoveInput() * 400.0;
 			}
 
+			// Clamp the position to the edges of the screen.
+			clampPositionToScreenEdge(obj, 0);
+
 			if isFireBtnPressed() {
 				if obj.gunLevel == 0 {
 					jitter = (getRandomNmbr() * 2 - 1) * 12;
@@ -217,9 +235,6 @@ updateGame = fn() {
 				obj.recoil = 0;
 			}
 
-			// Clamp the position to the edges of the screen.
-			clampPositionToScreenEdge(obj, 0);
-
 			// Check if the player ship is coliding with any enemies.
 			// If so apply damage to it.
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
@@ -228,6 +243,16 @@ updateGame = fn() {
 					if doCollide(obj, enemy) {
 						// Kill the player.
 						array_push(id2del, obj.id);
+						array_push(g_allGameObjects, makeExplosion(obj.x, obj.y));
+						g_isGameOver = 1;
+					}
+				}
+
+				if enemy.type == "enemyProjectile" {
+					if doCollide(obj, enemy) {
+						// Kill the player.
+						array_push(id2del, obj.id);
+						array_push(g_allGameObjects, makeExplosion(obj.x, obj.y));
 						g_isGameOver = 1;
 					}
 				}
@@ -238,7 +263,22 @@ updateGame = fn() {
 		if obj.type == "enemy" {
 			obj.phase = obj.phase + g_dt;
 			obj.y = obj.y + g_dt * obj.speed;
-			obj.x = obj.x + sin(obj.phase * obj.phaseSpeed) * obj.phaseMag;
+			xMovement = sin(obj.phase * obj.phaseSpeed) * obj.phaseMag;
+			obj.x = obj.x + xMovement;
+
+			obj.shootTimer = obj.shootTimer + g_dt;
+			if obj.shootTimer > 1 {
+				obj.shootTimer = 0;
+
+				shootingChance = 0.05;
+
+				if g_player.gunLevel >= 1 { shootingChance = 0.1; }
+				if g_player.gunLevel >= 2 { shootingChance = 0.125; }
+
+				if getRandomNmbr() <= shootingChance {
+					array_push(g_allGameObjects, makeEnemyProjectile(obj.x, obj.y, xMovement * 300));
+				}
+			}
 
 			if obj.y > 928 {
 				obj.y = -obj.radius*2 - getRandomNmbr() * obj.radius * 2;
@@ -276,6 +316,17 @@ updateGame = fn() {
 				array_push(id2del, obj.id);
 			}
 		}
+
+		if obj.type == "enemyProjectile" {
+			obj.x = obj.x + (g_dt * obj.speedX);
+			obj.y = obj.y + (g_dt * obj.speedY);
+
+			if obj.y > g_screenHeight + obj.radius {
+				array_push(id2del, obj.id);
+				
+			}
+		}
+
 
 		// Power ups
 		if obj.type == "powerUp" {
