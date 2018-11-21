@@ -85,13 +85,12 @@ makePowerUp = fn(x, y) {
 };
 
 makeExplosion = fn(x, y) {
-	radius = 128;
 	r = {
 		id = g_nextId;
 		type = "explosion";
 		x = x;
 		y = y;
-		radius = 128;
+		radius = 75;
 		progress = 0;
 	};
 	g_nextId = g_nextId + 1;
@@ -257,20 +256,17 @@ updateGame = fn() {
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
 				enemy = g_allGameObjects[e];
 				if enemy.type == "enemy" {
-					ex = enemy.x;
-					ey = enemy.y;
-
 					if doCollide(obj, enemy) {
 						// Kill the enemy.
 						array_push(id2del, obj.id);
-						array_push(g_allGameObjects, makeExplosion(ex, ey));
+						array_push(g_allGameObjects, makeExplosion(enemy.x, enemy.y));
 
 						enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
 						enemy.y = -enemy.radius*2;
 
 						// Chance to spawn a power up.
 						if getRandomNmbr() >= 0.975 {
-							array_push(g_allGameObjects, makePowerUp(ex, ey));
+							array_push(g_allGameObjects, makePowerUp(enemy.x, enemy.y));
 						}
 					}
 				}

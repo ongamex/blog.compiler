@@ -1895,6 +1895,7 @@ struct Game : public olc::PixelGameEngine
 				const float px = x;
 				const float py = y + sin(recoil * recoil * 3.14f) * 15;
 				DrawSprite(px, py, spritePlayer, 1);
+
 				if(y != prevPlayerYPos) {
 					if(sinf(globalTime * 6.28f * 10.f) > 0.5f) {
 						DrawSprite(px, py + 96, spriteFlame);
