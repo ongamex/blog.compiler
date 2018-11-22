@@ -425,6 +425,11 @@ updateGame = fn() {
 				g_player.gunLevel = g_player.gunLevel + 1;
 				g_score = g_score + 300;
 			}
+
+			if obj.y > g_screenHeight + obj.radius {
+				array_push(id2del, obj.id);
+				
+			}
 		}
 
 		// Health ups
@@ -438,6 +443,11 @@ updateGame = fn() {
 					g_player.health = 3;
 				}
 				g_score = g_score + 700;
+			}
+
+			if obj.y > g_screenHeight + obj.radius {
+				array_push(id2del, obj.id);
+				
 			}
 		}
 
