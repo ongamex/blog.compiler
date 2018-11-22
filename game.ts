@@ -12,6 +12,8 @@ g_dt = 0.0;
 //------------------------------------------------------
 // Global that are read by the "engine".
 //------------------------------------------------------
+g_score = 0;
+g_displayScore = 0;
 g_isGameOver = 0;
 g_timeSpentDead = 0;
 
@@ -112,7 +114,7 @@ makePowerUp = fn(x, y) {
 		type = "powerUp";
 		x = x;
 		y = y;
-		radius = 8;
+		radius = 15;
 		speedY = 50;
 	};
 	g_nextId = g_nextId + 1;
@@ -141,6 +143,8 @@ initGame = fn() {
 	g_timeSpentDead = 0;
 	g_allGameObjects = array{};
 	g_nextId = 0;
+	g_score = 0;
+	g_displayScore = 0;
 
 	array_push(g_allGameObjects, makePlayer(g_screenWidth * 0.5, g_screenHeight * 0.8));
 
@@ -152,17 +156,13 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemyBig(600, -32));
 	array_push(g_allGameObjects, makeEnemy(700, -64));
 	
-	array_push(g_allGameObjects, makeEnemyBig(100, -64));
+	array_push(g_allGameObjects, makeEnemy(100, -64));
 	array_push(g_allGameObjects, makeEnemy(200, -32));
 	array_push(g_allGameObjects, makeEnemyBig(300, -64));
 	array_push(g_allGameObjects, makeEnemy(400, -32));
 	array_push(g_allGameObjects, makeEnemyBig(500, -64));
 	array_push(g_allGameObjects, makeEnemy(600, -32));
-	array_push(g_allGameObjects, makeEnemyBig(700, -64));
-	
-	array_push(g_allGameObjects, makeEnemy(200, -132));
-	array_push(g_allGameObjects, makeEnemyBig(400, -132));
-	array_push(g_allGameObjects, makeEnemy(600, -132));
+	array_push(g_allGameObjects, makeEnemy(700, -64));
 };
 
 //------------------------------------------------------
@@ -202,6 +202,13 @@ clampPositionToScreenEdge = fn(obj, xOnly) {
 //------------------------------------------------------
 updateGame = fn() {
 	id2del = array{};
+
+	// Update the visual score.
+	g_displayScore = g_displayScore + g_dt * 300;
+
+	if g_displayScore > g_score {
+		g_displayScore = g_score;
+	}
 
 	// Iterate through all game objects and perform their update logic.
 	for t = 0; t < array_size(g_allGameObjects); t = t + 1
@@ -307,6 +314,7 @@ updateGame = fn() {
 			obj.y = obj.y + (g_dt * obj.speedY);
 			obj.x = obj.x + (g_dt * obj.speedX);
 
+			// Check for all game objects we've killed with that bullet.
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
 				enemy = g_allGameObjects[e];
 				if (enemy.type == "enemy") + (enemy.type == "enemyBig") {
@@ -324,6 +332,8 @@ updateGame = fn() {
 							
 							enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
 							enemy.y = -enemy.radius*2;
+
+							g_score = g_score + 50;
 
 							// Chance to spawn a power up.
 							if getRandomNmbr() >= 0.975 {
@@ -349,7 +359,6 @@ updateGame = fn() {
 			}
 		}
 
-
 		// Power ups
 		if obj.type == "powerUp" {
 			obj.y = obj.y + (g_dt * obj.speedY);
@@ -358,7 +367,6 @@ updateGame = fn() {
 				array_push(id2del, obj.id);
 				g_player.gunLevel = g_player.gunLevel + 1;
 			}
-			
 		}
 
 		// Explosions.

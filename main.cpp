@@ -1659,6 +1659,9 @@ struct Game : public olc::PixelGameEngine
 	Executor e;
 
 	bool preferMouseForShipControl = false;
+	olc::Sprite *spritesDigits[10] = { nullptr };
+	olc::Sprite *spriteScoreTxt = nullptr;
+	olc::Sprite *spriteLivesTxt = nullptr;
 	olc::Sprite *spriteGameOver = nullptr;
 	olc::Sprite *spritePlayer = nullptr;
 	olc::Sprite *spriteFlameBig = nullptr;
@@ -1682,6 +1685,8 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserCreate() override
 	{
+		spriteScoreTxt = new olc::Sprite("art/score.png");
+		spriteLivesTxt = new olc::Sprite("art/life.png");
 		spriteEnemyBig = new olc::Sprite("art/alienBig.png");
 		spriteGameOver = new olc::Sprite("art/gameOver.png");
 		spritePlayer = new olc::Sprite("art/player.png");
@@ -1692,6 +1697,17 @@ struct Game : public olc::PixelGameEngine
 		spriteProjectile = new olc::Sprite("art/projectile.png");
 		spriteEnemyProjectile = new olc::Sprite("art/shootAliens.png");
 		spritePowerUp = new olc::Sprite("art/powerUp.png");
+
+		spritesDigits[0] = new olc::Sprite("art/0.png");
+		spritesDigits[1] = new olc::Sprite("art/1.png");
+		spritesDigits[2] = new olc::Sprite("art/2.png");
+		spritesDigits[3] = new olc::Sprite("art/3.png");
+		spritesDigits[4] = new olc::Sprite("art/4.png");
+		spritesDigits[5] = new olc::Sprite("art/5.png");
+		spritesDigits[6] = new olc::Sprite("art/6.png");
+		spritesDigits[7] = new olc::Sprite("art/7.png");
+		spritesDigits[8] = new olc::Sprite("art/8.png");
+		spritesDigits[9] = new olc::Sprite("art/9.png");
 
 		spritesExplosion[0][0] = new olc::Sprite("art/enemyExplosion1-1.png");
 		spritesExplosion[0][1] = new olc::Sprite("art/enemyExplosion1-2.png");
@@ -1840,9 +1856,25 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+		const auto drawNumber = [&](int x, int y, int number) -> void {
+			number = abs(number);
+			int numDigits = 1;
+
+			while(pow(10, numDigits) < number) {
+				numDigits++;
+			}
+
+			int offsetX = 0;
+			for(int t = numDigits; t > 0; --t) {
+				int n = number % (int)(pow(10, t));
+				n = n / pow(10, t-1);
+				DrawSprite(x + offsetX, y, spritesDigits[n]);
+				offsetX += 19;
+			}
+		};
+
 		globalTime += fElapsedTime;
 		
-
 		// Clear the screen.
 		SetPixelMode(olc::Pixel::NORMAL);
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
@@ -1934,6 +1966,15 @@ struct Game : public olc::PixelGameEngine
 
 		if(isGameOver) {
 			DrawSprite(400 - 314, 150, spriteGameOver);
+
+			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
+			DrawSprite(400 - 300, 380, spriteScoreTxt);
+			drawNumber(400 - 300 + 110, 380, score);
+
+		} else {
+			const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
+			DrawSprite(10,10, spriteScoreTxt);
+			drawNumber(110 + 10, 10, score);
 		}
 
 		return true;
