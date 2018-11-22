@@ -1824,7 +1824,7 @@ struct Game : public olc::PixelGameEngine
 
 
 			NativeFnPtr const isFireBtnPressed = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(g_game->GetKey(olc::Q).bPressed || g_game->GetMouse(0).bPressed);
+				*ppResultVariable = exec->newVariableFloat(g_game->GetKey(olc::Q).bHeld || g_game->GetMouse(0).bHeld);
 				return 1;
 			};
 

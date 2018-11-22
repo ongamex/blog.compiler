@@ -36,6 +36,7 @@ makePlayer = fn(x, y) {
 		health = 3;
 		recoil = 0;
 		gunLevel = 0;
+		fireCooldown = 0;
 
 	};
 	g_player = r;
@@ -159,10 +160,13 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemy(100, -64));
 	array_push(g_allGameObjects, makeEnemy(200, -32));
 	array_push(g_allGameObjects, makeEnemyBig(300, -64));
-	array_push(g_allGameObjects, makeEnemy(400, -32));
+	array_push(g_allGameObjects, makeEnemyBig(400, -32));
 	array_push(g_allGameObjects, makeEnemyBig(500, -64));
 	array_push(g_allGameObjects, makeEnemy(600, -32));
 	array_push(g_allGameObjects, makeEnemy(700, -64));
+
+	array_push(g_allGameObjects, makeEnemy(100, -64));
+	array_push(g_allGameObjects, makeEnemy(700, -32));
 };
 
 //------------------------------------------------------
@@ -218,6 +222,8 @@ updateGame = fn() {
 		// Player
 		if obj.type == "player" {
 			
+			obj.fireCooldown = obj.fireCooldown - g_dt;
+
 			if shouldUseMouseForInput() {
 				obj.x = getMouseX();
 				obj.y = getMouseY();
@@ -229,7 +235,8 @@ updateGame = fn() {
 			// Clamp the position to the edges of the screen.
 			clampPositionToScreenEdge(obj, 0);
 
-			if isFireBtnPressed() {
+			if (obj.fireCooldown <= 0) * isFireBtnPressed() {
+				obj.fireCooldown = 0.125;
 				if obj.gunLevel == 0 {
 					jitter = (getRandomNmbr() * 2 - 1) * 12;
 					prjectile = makeProjectle(obj.x + jitter, obj.y - 32);
@@ -291,9 +298,9 @@ updateGame = fn() {
 				if obj.shootTimer > 1 {
 					obj.shootTimer = 0;
 
-					shootingChance = 0.1;
+					shootingChance = 0.075;
 					if g_player.gunLevel >= 1 { shootingChance = 0.15; }
-					if g_player.gunLevel >= 2 { shootingChance = 0.20; }
+					if g_player.gunLevel >= 2 { shootingChance = 0.33; }
 
 					if getRandomNmbr() <= shootingChance {
 						array_push(g_allGameObjects, makeEnemyProjectile(obj.x, obj.y, xMovement * 150));
@@ -333,10 +340,24 @@ updateGame = fn() {
 							enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
 							enemy.y = -enemy.radius*2;
 
-							g_score = g_score + 50;
+							if (enemy.type == "enemyBig") {
+								enemy.health = 5;
+							} else {
+								enemy.health = 1;
+							}
+
+							if (enemy.type == "enemyBig") {
+								g_score = g_score + 150;
+							} else {
+								g_score = g_score + 50;
+							}
+
+							powerUpSpawnChance = 0.075;
+							if g_player.gunLevel >= 1 { powerUpSpawnChance = 0.020; }
+							if g_player.gunLevel >= 2 { powerUpSpawnChance = 0.010; }
 
 							// Chance to spawn a power up.
-							if getRandomNmbr() >= 0.975 {
+							if getRandomNmbr() <= powerUpSpawnChance {
 								array_push(g_allGameObjects, makePowerUp(enemy.x, enemy.y));
 							}
 						}
