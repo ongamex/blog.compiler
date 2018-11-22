@@ -34,6 +34,7 @@ makePlayer = fn(x, y) {
 		y = y;
 		radius = 64;
 		health = 3;
+		hitCooldown = 0;
 		recoil = 0;
 		gunLevel = 0;
 		fireCooldown = 0;
@@ -222,6 +223,7 @@ updateGame = fn() {
 		// Player
 		if obj.type == "player" {
 			
+			obj.hitCooldown = obj.hitCooldown - g_dt;
 			obj.fireCooldown = obj.fireCooldown - g_dt;
 
 			if shouldUseMouseForInput() {
@@ -271,14 +273,23 @@ updateGame = fn() {
 
 			// Check if the player ship is coliding with any enemies.
 			// If so apply damage to it.
+			
 			for e = 0; e < array_size(g_allGameObjects); e = e + 1 {
-				enemy = g_allGameObjects[e];
-				if (enemy.type == "enemy") + (enemy.type == "enemyBig") + (enemy.type == "enemyProjectile") {
-					if doCollide(obj, enemy) {
-						// Kill the player.
-						array_push(id2del, obj.id);
-						array_push(g_allGameObjects, makeExplosion(obj.x, obj.y));
-						g_isGameOver = 1;
+				if obj.hitCooldown <= 0 {
+					enemy = g_allGameObjects[e];
+					if (enemy.type == "enemy") + (enemy.type == "enemyBig") + (enemy.type == "enemyProjectile") {
+						if doCollide(obj, enemy) {
+								
+							obj.health = obj.health - 1;
+							if obj.health == 0 {
+								// Kill the player.
+								array_push(id2del, obj.id);
+								array_push(g_allGameObjects, makeExplosion(obj.x, obj.y));
+								g_isGameOver = 1;
+							}
+
+							obj.hitCooldown = 1.3;
+						}
 					}
 				}
 			}

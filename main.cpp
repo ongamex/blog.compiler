@@ -1660,6 +1660,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool preferMouseForShipControl = false;
 	olc::Sprite *spritesDigits[10] = { nullptr };
+	olc::Sprite *spritesHearts[4] = { nullptr };
 	olc::Sprite *spriteScoreTxt = nullptr;
 	olc::Sprite *spriteLivesTxt = nullptr;
 	olc::Sprite *spriteGameOver = nullptr;
@@ -1675,8 +1676,6 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spritesExplosion[4][5] = { nullptr };
 
 	float globalTime = 0.f;
-	float prevPlayerYPos = 0.f; // The y coord position of the player on the previous frame, used to display the flame of the engine.
-
 
 	Game()
 	{
@@ -1697,6 +1696,11 @@ struct Game : public olc::PixelGameEngine
 		spriteProjectile = new olc::Sprite("art/projectile.png");
 		spriteEnemyProjectile = new olc::Sprite("art/shootAliens.png");
 		spritePowerUp = new olc::Sprite("art/powerUp.png");
+
+		spritesHearts[0] = new olc::Sprite("art/heart0.png");
+		spritesHearts[1] = new olc::Sprite("art/heart1.png");
+		spritesHearts[2] = new olc::Sprite("art/heart2.png");
+		spritesHearts[3] = new olc::Sprite("art/heart3.png");
 
 		spritesDigits[0] = new olc::Sprite("art/0.png");
 		spritesDigits[1] = new olc::Sprite("art/1.png");
@@ -1918,6 +1922,7 @@ struct Game : public olc::PixelGameEngine
 			e.evaluate(&fnCall, ctx2);
 		}
 
+		int playerLivesCnt = 0;
 		for(int t = 0; t < tsAllGameObjects->m_arrayValues->size(); ++t) {
 			Var& tsObj = (*tsAllGameObjects->m_arrayValues)[t];
 
@@ -1929,18 +1934,26 @@ struct Game : public olc::PixelGameEngine
 			
 			SetPixelMode(olc::Pixel::ALPHA);
 			if(type == "player") {
+				const float hitCooldown = playerLivesCnt = tsObj.m_tableLUT->at("hitCooldown").m_value_f32;
+				playerLivesCnt = tsObj.m_tableLUT->at("health").m_value_f32;
 				const float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
 				const float px = x;
 				const float py = y + sin(recoil * recoil * 3.14f) * 15;
-				DrawSprite(px, py, spritePlayer, 1);
-
-				if(sinf(globalTime * 6.28 * 3) > 0.f) {
-					DrawSprite(px, py + 128, spriteFlameBig);
-				} else {
-					DrawSprite(px, py + 128, spriteFlameSmall);
+				
+				bool shouldDraw = hitCooldown <= 0.f;
+				if(hitCooldown > 0.f)
+				{
+					shouldDraw = sinf(globalTime * 6.28 * 6.f) > 0.f;
 				}
 
-				prevPlayerYPos = y;
+				if(shouldDraw) {
+					DrawSprite(px, py, spritePlayer, 1);
+					if(sinf(globalTime * 6.28 * 3) > 0.f) {
+						DrawSprite(px, py + 128, spriteFlameBig);
+					} else {
+						DrawSprite(px, py + 128, spriteFlameSmall);
+					}
+				}
 			}
 			else if(type == "explosion")
 			{
@@ -1960,9 +1973,11 @@ struct Game : public olc::PixelGameEngine
 			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
 			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, 1);
 			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
-
-
 		}
+
+		const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
+		DrawSprite(10,10, spriteScoreTxt);
+		drawNumber(110 + 10, 10, score);
 
 		if(isGameOver) {
 			DrawSprite(400 - 314, 150, spriteGameOver);
@@ -1971,12 +1986,14 @@ struct Game : public olc::PixelGameEngine
 			DrawSprite(400 - 300, 380, spriteScoreTxt);
 			drawNumber(400 - 300 + 110, 380, score);
 
-		} else {
-			const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
-			DrawSprite(10,10, spriteScoreTxt);
-			drawNumber(110 + 10, 10, score);
 		}
 
+		DrawSprite(800 - 110 - 54 - 10, 10, spriteLivesTxt);
+
+		if(playerLivesCnt < 0) playerLivesCnt = 0;
+		if(playerLivesCnt > 3) playerLivesCnt = 3;
+
+		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt]);
 		return true;
 	}
 };
