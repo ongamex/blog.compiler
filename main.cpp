@@ -1662,6 +1662,7 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spritesDigits[10] = { nullptr };
 	olc::Sprite *spritesHearts[4] = { nullptr };
 	olc::Sprite *spriteScoreTxt = nullptr;
+	olc::Sprite *spriteLife = nullptr;
 	olc::Sprite *spriteLivesTxt = nullptr;
 	olc::Sprite *spriteGameOver = nullptr;
 	olc::Sprite *spritePlayer = nullptr;
@@ -1674,6 +1675,7 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spriteEnemyProjectile = nullptr;
 	olc::Sprite *spritePowerUp = nullptr;
 	olc::Sprite *spritesExplosion[4][5] = { nullptr };
+	olc::Sprite *spritesExplosionPlayer[7] = { nullptr };
 
 	float globalTime = 0.f;
 
@@ -1686,6 +1688,7 @@ struct Game : public olc::PixelGameEngine
 	{
 		spriteScoreTxt = new olc::Sprite("art/score.png");
 		spriteLivesTxt = new olc::Sprite("art/life.png");
+		spriteLife = new olc::Sprite("art/getALife.png");
 		spriteEnemyBig = new olc::Sprite("art/alienBig.png");
 		spriteGameOver = new olc::Sprite("art/gameOver.png");
 		spritePlayer = new olc::Sprite("art/player.png");
@@ -1736,6 +1739,14 @@ struct Game : public olc::PixelGameEngine
 		spritesExplosion[3][2] = new olc::Sprite("art/enemyExplosion4-3.png");
 		spritesExplosion[3][3] = new olc::Sprite("art/enemyExplosion4-4.png");
 		spritesExplosion[3][4] = new olc::Sprite("art/enemyExplosion4-5.png");
+
+		spritesExplosionPlayer[0] = new olc::Sprite("art/explosionPlayer0.png");
+		spritesExplosionPlayer[1] = new olc::Sprite("art/explosionPlayer1.png");
+		spritesExplosionPlayer[2] = new olc::Sprite("art/explosionPlayer2.png");
+		spritesExplosionPlayer[3] = new olc::Sprite("art/explosionPlayer3.png");
+		spritesExplosionPlayer[4] = new olc::Sprite("art/explosionPlayer4.png");
+		spritesExplosionPlayer[5] = new olc::Sprite("art/explosionPlayer5.png");
+		spritesExplosionPlayer[6] = new olc::Sprite("art/explosionPlayer6.png");
 
 		// Read the contents of the specified file.
 		std::vector<char> fileContents;
@@ -1885,7 +1896,10 @@ struct Game : public olc::PixelGameEngine
 		{
 			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
 			for(int w = 0; w < GetDrawTargetWidth(); w++) {
-				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel((1.f - k)*0x23 + k * 0x07, (1.f - k)*0x3c + k * 0x2e, (1.f - k)*0x69 + k * 0x2e);				
+				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(
+					(1.f - k)*20 + k * 144, 
+					(1.f - k)*32 + k * 184, 
+					(1.f - k)*74 + k * 177);				
 			}
 		}
 
@@ -1958,21 +1972,33 @@ struct Game : public olc::PixelGameEngine
 			else if(type == "explosion")
 			{
 				// Pick the sprite sheet for the explosion based on the index.
-				const int sheetIndex = (int)(tsObj.m_tableLUT->at("id").m_value_f32) % 4;
+				if(tsObj.m_tableLUT->at("isForPlayer").m_value_f32)
+				{
+					const float duration = 0.250f;
+					const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
+					int frame = (progress / duration) * 6;
+					if(frame > 6) frame = 6;
 
-				const float duration = 0.250f;
-				const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
-				int frame = (progress / duration) * 4;
-				if(frame > 4) frame = 4;
+					DrawSprite(x, y, spritesExplosionPlayer[frame]);
+				}
+				else
+				{
+					const int sheetIndex = (int)(tsObj.m_tableLUT->at("id").m_value_f32) % 4;
 
-				DrawSprite(x, y, spritesExplosion[sheetIndex][frame]);
+					const float duration = 0.250f;
+					const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
+					int frame = (progress / duration) * 4;
+					if(frame > 4) frame = 4;
 
+					DrawSprite(x, y, spritesExplosion[sheetIndex][frame]);
+				}
 			}
 			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
 			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, 1);
 			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
 			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, 1);
 			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
+			else if(type == "healthUp") DrawSprite(x, y, spriteLife, 1);
 		}
 
 		const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;

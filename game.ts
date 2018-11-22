@@ -54,8 +54,8 @@ makeEnemy = fn(x, y) {
 		radius = 32;
 		health = 1;
 		hitCooldown = 0;
-		speed = getRandomNmbr() * 200 + 150;
-		phase = getRandomNmbr() * 100;
+		speed = getRandomNmbr() * 260 + 160;
+		phase = getRandomNmbr() * 120;
 		phaseSpeed = getRandomNmbr()*3.0  + 1.0;
 		phaseMag = getRandomNmbr() * 1.2;
 	};
@@ -70,12 +70,12 @@ makeEnemyBig = fn(x, y) {
 		x = x;
 		y = y;
 		radius = 35;
-		health = 3;
+		health = 7;
 		hitCooldown = 0;
-		speed = getRandomNmbr() * 100 + 50;
+		speed = getRandomNmbr() * 100 + 70;
 		phase = 50 + getRandomNmbr() * 100;
-		phaseSpeed = getRandomNmbr()*3.0  + 1.0;
-		phaseMag = getRandomNmbr() * 2.6;
+		phaseSpeed = getRandomNmbr()*3.0  + 1.5;
+		phaseMag = 0.5 + getRandomNmbr() * 2.6;
 		shootTimer = 0;
 	};
 	g_nextId = g_nextId + 1;
@@ -123,7 +123,20 @@ makePowerUp = fn(x, y) {
 	return r;
 };
 
-makeExplosion = fn(x, y) {
+makeHealthUp = fn(x, y) {
+	r = {
+		id = g_nextId;
+		type = "healthUp";
+		x = x;
+		y = y;
+		radius = 30;
+		speedY = 150;
+	};
+	g_nextId = g_nextId + 1;
+	return r;
+};
+
+makeExplosion = fn(x, y, isForPlayer) {
 	r = {
 		id = g_nextId;
 		type = "explosion";
@@ -131,6 +144,7 @@ makeExplosion = fn(x, y) {
 		y = y;
 		radius = 75;
 		progress = 0;
+		isForPlayer = isForPlayer;
 	};
 	g_nextId = g_nextId + 1;
 	return r;
@@ -153,7 +167,7 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemy(100, -64));
 	array_push(g_allGameObjects, makeEnemyBig(200, -32));
 	array_push(g_allGameObjects, makeEnemy(300, -64));
-	array_push(g_allGameObjects, makeEnemyBig(400, -32));
+	array_push(g_allGameObjects, makeEnemy(400, -32));
 	array_push(g_allGameObjects, makeEnemy(500, -64));
 	array_push(g_allGameObjects, makeEnemyBig(600, -32));
 	array_push(g_allGameObjects, makeEnemy(700, -64));
@@ -161,7 +175,6 @@ initGame = fn() {
 	array_push(g_allGameObjects, makeEnemy(100, -64));
 	array_push(g_allGameObjects, makeEnemy(200, -32));
 	array_push(g_allGameObjects, makeEnemyBig(300, -64));
-	array_push(g_allGameObjects, makeEnemyBig(400, -32));
 	array_push(g_allGameObjects, makeEnemyBig(500, -64));
 	array_push(g_allGameObjects, makeEnemy(600, -32));
 	array_push(g_allGameObjects, makeEnemy(700, -64));
@@ -208,12 +221,22 @@ clampPositionToScreenEdge = fn(obj, xOnly) {
 updateGame = fn() {
 	id2del = array{};
 
+
+	if g_isGameOver == 0 {
+		g_score = g_score + g_dt * 111;
+	}
+
 	// Update the visual score.
 	g_displayScore = g_displayScore + g_dt * 300;
+
+	if g_displayScore + 500 < g_score {
+		g_displayScore = g_displayScore + 500;
+	}
 
 	if g_displayScore > g_score {
 		g_displayScore = g_score;
 	}
+
 
 	// Iterate through all game objects and perform their update logic.
 	for t = 0; t < array_size(g_allGameObjects); t = t + 1
@@ -284,7 +307,7 @@ updateGame = fn() {
 							if obj.health == 0 {
 								// Kill the player.
 								array_push(id2del, obj.id);
-								array_push(g_allGameObjects, makeExplosion(obj.x, obj.y));
+								array_push(g_allGameObjects, makeExplosion(obj.x, obj.y, 1));
 								g_isGameOver = 1;
 							}
 
@@ -306,7 +329,7 @@ updateGame = fn() {
 
 			if obj.type == "enemyBig" {
 				obj.shootTimer = obj.shootTimer + g_dt;
-				if obj.shootTimer > 1 {
+				if obj.shootTimer > 0.8 {
 					obj.shootTimer = 0;
 
 					shootingChance = 0.075;
@@ -346,13 +369,13 @@ updateGame = fn() {
 
 						if enemy.health <= 0 {
 							// Kill the enemy.	
-							array_push(g_allGameObjects, makeExplosion(enemy.x, enemy.y));
+							array_push(g_allGameObjects, makeExplosion(enemy.x, enemy.y, 0));
 							
 							enemy.x = enemy.radius*2 + (g_screenWidth - enemy.radius*2) * getRandomNmbr();
 							enemy.y = -enemy.radius*2;
 
 							if (enemy.type == "enemyBig") {
-								enemy.health = 5;
+								enemy.health = 7;
 							} else {
 								enemy.health = 1;
 							}
@@ -370,6 +393,8 @@ updateGame = fn() {
 							// Chance to spawn a power up.
 							if getRandomNmbr() <= powerUpSpawnChance {
 								array_push(g_allGameObjects, makePowerUp(enemy.x, enemy.y));
+							} else if getRandomNmbr() <= 0.005 {
+								array_push(g_allGameObjects, makeHealthUp(enemy.x, enemy.y));
 							}
 						}
 					}
@@ -398,6 +423,21 @@ updateGame = fn() {
 			if doCollide(obj, g_player) {
 				array_push(id2del, obj.id);
 				g_player.gunLevel = g_player.gunLevel + 1;
+				g_score = g_score + 300;
+			}
+		}
+
+		// Health ups
+		if obj.type == "healthUp" {
+			obj.y = obj.y + (g_dt * obj.speedY);
+
+			if doCollide(obj, g_player) {
+				array_push(id2del, obj.id);
+				g_player.health = g_player.health + 1;
+				if g_player.health > 3 {
+					g_player.health = 3;
+				}
+				g_score = g_score + 700;
 			}
 		}
 
