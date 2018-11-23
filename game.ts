@@ -223,14 +223,14 @@ updateGame = fn() {
 
 
 	if g_isGameOver == 0 {
-		g_score = g_score + g_dt * 111;
+		g_score = g_score + g_dt * 3;
 	}
 
 	// Update the visual score.
-	g_displayScore = g_displayScore + g_dt * 300;
+	g_displayScore = g_displayScore + g_dt * 100;
 
-	if g_displayScore + 500 < g_score {
-		g_displayScore = g_displayScore + 500;
+	if g_displayScore + 800 < g_score {
+		g_displayScore = g_displayScore + 800;
 	}
 
 	if g_displayScore > g_score {
@@ -304,6 +304,12 @@ updateGame = fn() {
 						if doCollide(obj, enemy) {
 								
 							obj.health = obj.health - 1;
+
+							obj.gunLevel = obj.gunLevel - 1;
+							if obj.gunLevel < 0 {
+								obj.gunLevel = 0;
+							}
+
 							if obj.health == 0 {
 								// Kill the player.
 								array_push(id2del, obj.id);
@@ -381,9 +387,9 @@ updateGame = fn() {
 							}
 
 							if (enemy.type == "enemyBig") {
-								g_score = g_score + 150;
+								g_score = g_score + 200;
 							} else {
-								g_score = g_score + 50;
+								g_score = g_score + 15;
 							}
 
 							powerUpSpawnChance = 0.075;
@@ -442,7 +448,7 @@ updateGame = fn() {
 				if g_player.health > 3 {
 					g_player.health = 3;
 				}
-				g_score = g_score + 700;
+				g_score = g_score + 800;
 			}
 
 			if obj.y > g_screenHeight + obj.radius {

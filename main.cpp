@@ -1918,7 +1918,7 @@ struct Game : public olc::PixelGameEngine
 		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
 
 		// Restart the game if needed.
-		if(isGameOver && (GetKey(olc::Q).bHeld || GetMouse(0).bHeld) && e.findVariableInScope("g_timeSpentDead", false, false)->m_value_f32 > 0.5f) {
+		if(isGameOver && (GetKey(olc::Q).bPressed || GetMouse(0).bPressed) && e.findVariableInScope("g_timeSpentDead", false, false)->m_value_f32 > 0.5f) {
 			AstFnCall fnCall(Location(0,0));
 			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("initGame", false, false)->m_fnIdx];
 			Executor::EvalCtx ctx2;
