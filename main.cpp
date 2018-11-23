@@ -1877,7 +1877,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-		const auto drawNumber = [&](int x, int y, int number) -> void {
+		const auto drawNumber = [&](int x, int y, int number, float tint) -> void {
 			number = abs(number);
 			int numDigits = 1;
 
@@ -1889,13 +1889,17 @@ struct Game : public olc::PixelGameEngine
 			for(int t = numDigits; t > 0; --t) {
 				int n = number % (int)(pow(10, t));
 				n = n / pow(10, t-1);
-				DrawSprite(x + offsetX, y, spritesDigits[n]);
+				DrawSprite(x + offsetX, y, spritesDigits[n], tint);
 				offsetX += 19;
 			}
 		};
 
 		globalTime += fElapsedTime;
+
+		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
 		
+		const float gameTint = isGameOver ? 0.5f : 1.f;
+
 		// Clear the screen.
 		SetPixelMode(olc::Pixel::NORMAL);
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
@@ -1903,9 +1907,9 @@ struct Game : public olc::PixelGameEngine
 			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
 			for(int w = 0; w < GetDrawTargetWidth(); w++) {
 				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(
-					(1.f - k)*20 + k * 144, 
-					(1.f - k)*32 + k * 184, 
-					(1.f - k)*74 + k * 177);				
+					gameTint*((1.f - k)*20 + k * 144), 
+					gameTint*((1.f - k)*32 + k * 184), 
+					gameTint*((1.f - k)*74 + k * 177));				
 			}
 		}
 
@@ -1921,7 +1925,7 @@ struct Game : public olc::PixelGameEngine
 		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
 
 		//
-		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
+		isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
 
 		// Restart the game if needed.
 		if(isGameOver && (GetKey(olc::Q).bPressed || GetMouse(0).bPressed) && e.findVariableInScope("g_timeSpentDead", false, false)->m_value_f32 > 0.5f) {
@@ -1967,11 +1971,11 @@ struct Game : public olc::PixelGameEngine
 				}
 
 				if(shouldDraw) {
-					DrawSprite(px, py, spritePlayer, 1);
+					DrawSprite(px, py, spritePlayer, gameTint);
 					if(sinf(globalTime * 6.28 * 3) > 0.f) {
-						DrawSprite(px, py + 128, spriteFlameBig);
+						DrawSprite(px, py + 128, spriteFlameBig, gameTint);
 					} else {
-						DrawSprite(px, py + 128, spriteFlameSmall);
+						DrawSprite(px, py + 128, spriteFlameSmall, gameTint);
 					}
 				}
 			}
@@ -1985,7 +1989,7 @@ struct Game : public olc::PixelGameEngine
 					int frame = (progress / duration) * 6;
 					if(frame > 6) frame = 6;
 
-					DrawSprite(x, y, spritesExplosionPlayer[frame]);
+					DrawSprite(x, y, spritesExplosionPlayer[frame], gameTint);
 				}
 				else
 				{
@@ -1996,20 +2000,20 @@ struct Game : public olc::PixelGameEngine
 					int frame = (progress / duration) * 4;
 					if(frame > 4) frame = 4;
 
-					DrawSprite(x, y, spritesExplosion[sheetIndex][frame]);
+					DrawSprite(x, y, spritesExplosion[sheetIndex][frame], gameTint);
 				}
 			}
-			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, 1);
-			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, 1);
-			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, 1);
-			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, 1);
-			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, 1);
-			else if(type == "healthUp") DrawSprite(x, y, spriteLife, 1);
+			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, gameTint);
+			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, gameTint);
+			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, gameTint);
+			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, gameTint);
+			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, gameTint);
+			else if(type == "healthUp") DrawSprite(x, y, spriteLife, gameTint);
 		}
 
 		const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
-		DrawSprite(10,10, spriteScoreTxt);
-		drawNumber(110 + 10, 10, score);
+		DrawSprite(10,10, spriteScoreTxt, gameTint);
+		drawNumber(110 + 10, 10, score, gameTint);
 
 		if(isGameOver) {
 
@@ -2031,22 +2035,22 @@ struct Game : public olc::PixelGameEngine
 				}
 			}
 
-			DrawSprite(400 - 314, 150, spriteGameOver);
+			DrawSprite(400 - 314, 150, spriteGameOver, 1);
 
 			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
-			DrawSprite(400 - 300 + 21, 380, spriteHighScoreTxt);
-			drawNumber(355, 380, prevHighScore);
+			DrawSprite(400 - 300 + 21, 380, spriteHighScoreTxt, 1);
+			drawNumber(355, 380, prevHighScore, 1.f);
 
-			DrawSprite(400 - 300, 451, spriteYourScoreTxt);
-			drawNumber(355, 451, score);
+			DrawSprite(400 - 300, 451, spriteYourScoreTxt, 1);
+			drawNumber(355, 451, score, 1.f);
 		}
 
-		DrawSprite(800 - 110 - 54 - 10, 10, spriteLivesTxt);
+		DrawSprite(800 - 110 - 54 - 10, 10, spriteLivesTxt, 1);
 
 		if(playerLivesCnt < 0) playerLivesCnt = 0;
 		if(playerLivesCnt > 3) playerLivesCnt = 3;
 
-		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt]);
+		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt], 1);
 
 		wasGameOver = isGameOver;
 
