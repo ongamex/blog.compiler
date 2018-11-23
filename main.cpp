@@ -2056,12 +2056,12 @@ struct Game : public olc::PixelGameEngine
 			drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f);
 		}
 
-		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, 1);
+		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, gameTint);
 
 		if(playerLivesCnt < 0) playerLivesCnt = 0;
 		if(playerLivesCnt > 3) playerLivesCnt = 3;
 
-		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt], 1);
+		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt], gameTint);
 
 		wasGameOver = isGameOver;
 
