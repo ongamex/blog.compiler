@@ -1659,7 +1659,7 @@ struct Game : public olc::PixelGameEngine
 	Executor e;
 
 	bool preferMouseForShipControl = false;
-	olc::Sprite *spritesDigits[10] = { nullptr };
+	olc::Sprite *spritesDigits[2][10] = { nullptr };
 	olc::Sprite *spritesHearts[4] = { nullptr };
 	olc::Sprite *spriteScoreTxt = nullptr;
 	olc::Sprite *spriteYourScoreTxt = nullptr;
@@ -1711,16 +1711,27 @@ struct Game : public olc::PixelGameEngine
 		spritesHearts[2] = new olc::Sprite("art/heart2.png");
 		spritesHearts[3] = new olc::Sprite("art/heart3.png");
 
-		spritesDigits[0] = new olc::Sprite("art/0.png");
-		spritesDigits[1] = new olc::Sprite("art/1.png");
-		spritesDigits[2] = new olc::Sprite("art/2.png");
-		spritesDigits[3] = new olc::Sprite("art/3.png");
-		spritesDigits[4] = new olc::Sprite("art/4.png");
-		spritesDigits[5] = new olc::Sprite("art/5.png");
-		spritesDigits[6] = new olc::Sprite("art/6.png");
-		spritesDigits[7] = new olc::Sprite("art/7.png");
-		spritesDigits[8] = new olc::Sprite("art/8.png");
-		spritesDigits[9] = new olc::Sprite("art/9.png");
+		spritesDigits[0][0] = new olc::Sprite("art/0.png");
+		spritesDigits[0][1] = new olc::Sprite("art/1.png");
+		spritesDigits[0][2] = new olc::Sprite("art/2.png");
+		spritesDigits[0][3] = new olc::Sprite("art/3.png");
+		spritesDigits[0][4] = new olc::Sprite("art/4.png");
+		spritesDigits[0][5] = new olc::Sprite("art/5.png");
+		spritesDigits[0][6] = new olc::Sprite("art/6.png");
+		spritesDigits[0][7] = new olc::Sprite("art/7.png");
+		spritesDigits[0][8] = new olc::Sprite("art/8.png");
+		spritesDigits[0][9] = new olc::Sprite("art/9.png");
+
+		spritesDigits[1][0] = new olc::Sprite("art/big0.png");
+		spritesDigits[1][1] = new olc::Sprite("art/big1.png");
+		spritesDigits[1][2] = new olc::Sprite("art/big2.png");
+		spritesDigits[1][3] = new olc::Sprite("art/big3.png");
+		spritesDigits[1][4] = new olc::Sprite("art/big4.png");
+		spritesDigits[1][5] = new olc::Sprite("art/big5.png");
+		spritesDigits[1][6] = new olc::Sprite("art/big6.png");
+		spritesDigits[1][7] = new olc::Sprite("art/big7.png");
+		spritesDigits[1][8] = new olc::Sprite("art/big8.png");
+		spritesDigits[1][9] = new olc::Sprite("art/big9.png");
 
 		spritesExplosion[0][0] = new olc::Sprite("art/enemyExplosion1-1.png");
 		spritesExplosion[0][1] = new olc::Sprite("art/enemyExplosion1-2.png");
@@ -1877,7 +1888,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
-		const auto drawNumber = [&](int x, int y, int number, float tint) -> void {
+		const auto drawNumber = [&](int useBig, int x, int y, int number, float tint) -> void {
 			number = abs(number);
 			int numDigits = 1;
 
@@ -1889,8 +1900,8 @@ struct Game : public olc::PixelGameEngine
 			for(int t = numDigits; t > 0; --t) {
 				int n = number % (int)(pow(10, t));
 				n = n / pow(10, t-1);
-				DrawSprite(x + offsetX, y, spritesDigits[n], tint);
-				offsetX += 19;
+				DrawSprite(x + offsetX, y, spritesDigits[useBig][n], tint);
+				offsetX += spritesDigits[useBig][0]->width;
 			}
 		};
 
@@ -2012,8 +2023,8 @@ struct Game : public olc::PixelGameEngine
 		}
 
 		const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
-		DrawSprite(10,10, spriteScoreTxt, gameTint);
-		drawNumber(110 + 10, 10, score, gameTint);
+		DrawSprite(10,20, spriteScoreTxt, gameTint);
+		drawNumber(false, 110 + 10, 20, score, gameTint);
 
 		if(isGameOver) {
 
@@ -2038,14 +2049,14 @@ struct Game : public olc::PixelGameEngine
 			DrawSprite(400 - 314, 150, spriteGameOver, 1);
 
 			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
-			DrawSprite(400 - 300 + 21, 380, spriteHighScoreTxt, 1);
-			drawNumber(355, 380, prevHighScore, 1.f);
+			DrawSprite(400 - 314, 380, spriteHighScoreTxt, 1);
+			drawNumber(true, 400 - 314 + spriteHighScoreTxt->width + 5, 380, prevHighScore, 1.f);
 
-			DrawSprite(400 - 300, 451, spriteYourScoreTxt, 1);
-			drawNumber(355, 451, score, 1.f);
+			DrawSprite(400 - 314, 451, spriteYourScoreTxt, 1);
+			drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f);
 		}
 
-		DrawSprite(800 - 110 - 54 - 10, 10, spriteLivesTxt, 1);
+		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, 1);
 
 		if(playerLivesCnt < 0) playerLivesCnt = 0;
 		if(playerLivesCnt > 3) playerLivesCnt = 3;
