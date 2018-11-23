@@ -1662,6 +1662,8 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spritesDigits[10] = { nullptr };
 	olc::Sprite *spritesHearts[4] = { nullptr };
 	olc::Sprite *spriteScoreTxt = nullptr;
+	olc::Sprite *spriteYourScoreTxt = nullptr;
+	olc::Sprite *spriteHighScoreTxt = nullptr;
 	olc::Sprite *spriteLife = nullptr;
 	olc::Sprite *spriteLivesTxt = nullptr;
 	olc::Sprite *spriteGameOver = nullptr;
@@ -1678,6 +1680,8 @@ struct Game : public olc::PixelGameEngine
 	olc::Sprite *spritesExplosionPlayer[7] = { nullptr };
 
 	float globalTime = 0.f;
+	bool wasGameOver = false;
+	int prevHighScore = 0;
 
 	Game()
 	{
@@ -1687,6 +1691,8 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserCreate() override
 	{
 		spriteScoreTxt = new olc::Sprite("art/score.png");
+		spriteHighScoreTxt = new olc::Sprite("art/highScore.png");
+		spriteYourScoreTxt = new olc::Sprite("art/yourScore.png");
 		spriteLivesTxt = new olc::Sprite("art/life.png");
 		spriteLife = new olc::Sprite("art/getALife.png");
 		spriteEnemyBig = new olc::Sprite("art/alienBig.png");
@@ -1974,7 +1980,7 @@ struct Game : public olc::PixelGameEngine
 				// Pick the sprite sheet for the explosion based on the index.
 				if(tsObj.m_tableLUT->at("isForPlayer").m_value_f32)
 				{
-					const float duration = 0.250f;
+					const float duration = 0.5;
 					const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
 					int frame = (progress / duration) * 6;
 					if(frame > 6) frame = 6;
@@ -2006,12 +2012,33 @@ struct Game : public olc::PixelGameEngine
 		drawNumber(110 + 10, 10, score);
 
 		if(isGameOver) {
+
+			// Update the highscore.
+			if(wasGameOver == false){
+				FILE* f = fopen("score.dat", "rb");
+				if(f){
+					fread(&prevHighScore, sizeof(prevHighScore), 1, f);
+					fclose(f);
+				}
+
+				if(score > prevHighScore) {
+					f = fopen("score.dat", "wb+");
+					if(f)
+					{
+						fwrite(&score, sizeof(score), 1, f);
+						fclose(f);
+					}
+				}
+			}
+
 			DrawSprite(400 - 314, 150, spriteGameOver);
 
 			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
-			DrawSprite(400 - 300, 380, spriteScoreTxt);
-			drawNumber(400 - 300 + 110, 380, score);
+			DrawSprite(400 - 300 + 21, 380, spriteHighScoreTxt);
+			drawNumber(355, 380, prevHighScore);
 
+			DrawSprite(400 - 300, 451, spriteYourScoreTxt);
+			drawNumber(355, 451, score);
 		}
 
 		DrawSprite(800 - 110 - 54 - 10, 10, spriteLivesTxt);
@@ -2020,6 +2047,9 @@ struct Game : public olc::PixelGameEngine
 		if(playerLivesCnt > 3) playerLivesCnt = 3;
 
 		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt]);
+
+		wasGameOver = isGameOver;
+
 		return true;
 	}
 };

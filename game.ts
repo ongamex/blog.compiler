@@ -459,8 +459,14 @@ updateGame = fn() {
 
 		// Explosions.
 		if obj.type == "explosion" {
-			if obj.progress > 0.250 {
-				array_push(id2del, obj.id);
+			if obj.isForPlayer {
+				if obj.progress > 0.5 {
+					array_push(id2del, obj.id);
+				}
+			} else {
+				if obj.progress > 0.250 {
+					array_push(id2del, obj.id);
+				}
 			}
 
 			obj.progress = obj.progress + g_dt;
