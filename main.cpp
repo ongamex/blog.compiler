@@ -32,7 +32,7 @@ struct Error
 };
 
 // Set to 1 when debugging.
-#if 1
+#if 0
 	#define ThrowError(location, msg) do {assert(false); throw Error(location, msg); } while(false)
 #else
 	#define ThrowError(location, msg) do { throw Error(location, msg); } while(false)
@@ -521,19 +521,23 @@ struct AstReturn : public AstNode
 	AstNode* expression;
 };
 
+// The parser itself.
+// Takes a list of tokens and produces an AST.
 struct Parser
 {
-	AstNode* root = nullptr;
 	const Token* m_token = nullptr;
 	std::unordered_map<int, AstFnDecl*> m_fnIdx2fn;
 
+	// Registers the specified AstFnDecl, and gives the function specified by it a unique id(in that case just an index in a Look-Up-Table).
+	// This id is used to identify the function and to perform function calls.
 	void registerFunction(AstFnDecl* const fnDecl) {
 		fnDecl->fnIdx = m_fnIdx2fn.size();
 		m_fnIdx2fn[m_fnIdx2fn.size()] = fnDecl;
 	}
 
-	void parse() {
-		root = parse_programRoot();
+	// Parses the specified list of token stored in m_token array (assums that the last token is tokenType_endToken).
+	AstNode* parse() {
+		return parse_programRoot();
 	}
 
 	// A block of statements or a single statement.
@@ -755,10 +759,7 @@ struct Parser
 
 			if(m_token->type == tokenType_comma) {
 				match(tokenType_comma);
-			} else {
-				ThrowError(m_token->location, "Expected }");
-				return nullptr;
-			}
+			} 
 		}
 		match(tokenType_blockEnd);
 
@@ -806,7 +807,6 @@ struct Parser
 			left = parse_expression_fndecl();
 		}
 
-		//
 		if(left == nullptr) {
 			ThrowError(m_token->location, "Unknown expression");
 			return nullptr;
@@ -1009,6 +1009,12 @@ struct Parser
 	}
 };
 
+//-----------------------------------------------------------------------------------------------------
+// The Executor (also know as Interpreter or Virtual Machine) and all the data that is needed to
+// execute our script.
+//-----------------------------------------------------------------------------------------------------
+
+// An enum describing all posible variable types that out language could handle.
 enum VarType : int
 {
 	varType_undefined,
@@ -1020,10 +1026,13 @@ enum VarType : int
 	varType_fnNative, // A C++ function basically.
 };
 
+// A common typedef used for interop between the scrpting language and C++.
+// Example usages are: array_size array_push array_pop functions in the language.
 struct Var;
 struct Executor;
 typedef int (*NativeFnPtr)(int argc, Var* argv[], Executor* exec, Var** ppResultVariable);
 
+// The strcture that represents a single value(and variable) while executing the script.
 struct Var
 {
 	Var(VarType const varType = varType_undefined)
@@ -1038,30 +1047,26 @@ struct Var
 		}
 	}
 
-	void makeFloat32(const float value)
-	{
+	// TODO: These are kind of redundant and can be removed with a bit of work.
+	void makeFloat32(const float value) {
 		*this = Var(varType_f32);
 		m_value_f32 = value;
 	}
 
-	void makeString(std::string s)
-	{
+	void makeString(std::string s) {
 		*this = Var(varType_string);
 		m_value_string = std::move(s);
 	}
 
-	void makeTable()
-	{
+	void makeTable() {
 		*this = Var(varType_table);
 	}
 
-	void makeArray()
-	{
+	void makeArray() {
 		*this = Var(varType_array);
 	}
 
-	void makeFunction(int functionIndex)
-	{
+	void makeFunction(int functionIndex) {
 		*this = Var(varType_fn);
 		m_fnIdx = functionIndex;
 	}
@@ -1073,16 +1078,21 @@ struct Var
 
 public :
 
-	VarType m_varType = varType_undefined; // Flags of enum VarFlag
+	VarType m_varType = varType_undefined;
 
-	float m_value_f32 = 0.f;
-	int m_fnIdx = -1;
-	NativeFnPtr m_fnNative = nullptr;
-	std::string m_value_string;
-	std::shared_ptr<std::unordered_map<std::string, Var>> m_tableLUT; // member name ot variable
-	std::shared_ptr<std::vector<Var>> m_arrayValues; // member name ot variable
+	// The data that could be used depending on the type of the variable:
+	float m_value_f32 = 0.f; // A float representing a number in our language.
+	int m_fnIdx = -1;  // An int containing the function id of the function that we point to (see registerFunction).
+	NativeFnPtr m_fnNative = nullptr; // Used to enable our script to call native C++ functions via that function-pointer typedef.
+	std::string m_value_string; // A std::string for strings in our language.
+
+	// These two are shared_ptrs in order to replicate the bahiavior that is used in JavaScript.
+	// When we pass these around we pass them by reference (all other types are by value).
+	std::shared_ptr<std::unordered_map<std::string, Var>> m_tableLUT; // If this variable is a table, holds names and values of all of its members.
+	std::shared_ptr<std::vector<Var>> m_arrayValues; // If this is an array, hold the member values for each index.
 };
 
+// Just a function that prints the type and value of the specified variable to std::out.
 void printVariable(const Var* const expr)
 {
 	if(expr->m_varType == varType_f32)
@@ -1117,15 +1127,21 @@ void printVariable(const Var* const expr)
 		printf("<undefined>\n");
 };
 
+// Represents a 'scope' in our language. Each function or a block create it's own scope
+// in order to enable us to have colliding variable names.
+// Even if the variables are in different functions we still need this scope.
+// In our case, depending on the current block, we just amend all scopes (the currenct scope is stored in an array).,
+// at the begining of the variable name - this is name collisions are resolved.
 struct Scope
 {
 	std::string scope;
 };
 
+// The executor itself.
+// Takes and AST node and executes.
 struct Executor
 {
-	Executor()
-	{
+	Executor() {
 		addStnadardLibFunctions();
 	}
 
@@ -1345,7 +1361,7 @@ struct Executor
 				}
 				
 				// Unknown operation.
-				ThrowError(n->location, "Uknown binary operation");
+				ThrowError(n->location, "Uknown/Unimplemented binary operation");
 			}break;
 			case astNodeType_unop:
 			{
@@ -1476,15 +1492,16 @@ struct Executor
 					pushScope(n, nullptr);
 				}
 
+				Var* result = nullptr;
 				for(AstNode* node : n->m_statements) {
-					evaluate(node, ctx);
+					result = evaluate(node, ctx);
 				}
 
 				if(n->needsOwnScope) {
 					popScope();
 				}
 
-				return nullptr;
+				return result;
 			}break;
 			case astNodeType_if:
 			{
@@ -1628,13 +1645,12 @@ private :
 		};
 
 		newVariableNativeFunction("array_push", array_push);
-
 	}
 	
-	
-
 public :
 
+	// TODO: Currently "Parser* parser" used only for m_fnIdx2fn, with a tiny bit of work this dependancy could be removed.
+	// This currently prevents us form injecting more code in our enviornment.
 	Parser* parser = nullptr;
 	std::unordered_map<std::string, Var*> m_variablesLut;
 	std::vector<Var*> m_allocatedVariables;
@@ -1644,442 +1660,6 @@ public :
 ///
 ///
 ///
-
-#define OLC_PGE_APPLICATION
-#include "olcPixelGameEngine.h"
-
-#include <algorithm>
-#undef min
-#undef max
-
-struct Game* g_game;
-struct Game : public olc::PixelGameEngine
-{
-	Parser p;
-	Executor e;
-
-	bool preferMouseForShipControl = false;
-	olc::Sprite *spritesDigits[2][10] = { nullptr };
-	olc::Sprite *spritesHearts[4] = { nullptr };
-	olc::Sprite *spriteScoreTxt = nullptr;
-	olc::Sprite *spriteYourScoreTxt = nullptr;
-	olc::Sprite *spriteHighScoreTxt = nullptr;
-	olc::Sprite *spriteLife = nullptr;
-	olc::Sprite *spriteLivesTxt = nullptr;
-	olc::Sprite *spriteGameOver = nullptr;
-	olc::Sprite *spritePlayer = nullptr;
-	olc::Sprite *spriteFlameBig = nullptr;
-	olc::Sprite *spriteFlameSmall = nullptr;
-	olc::Sprite *spriteEnemy = nullptr;
-	olc::Sprite *spriteEnemyBig = nullptr;
-	//olc::Sprite *spriteEnemyBig = nullptr;
-	olc::Sprite *spriteProjectile = nullptr;
-	olc::Sprite *spriteEnemyProjectile = nullptr;
-	olc::Sprite *spritePowerUp = nullptr;
-	olc::Sprite *spritesExplosion[4][5] = { nullptr };
-	olc::Sprite *spritesExplosionPlayer[7] = { nullptr };
-
-	float globalTime = 0.f;
-	bool wasGameOver = false;
-	int prevHighScore = 0;
-
-	Game()
-	{
-		sAppName = "Game TinyScript";
-	}
-
-	bool OnUserCreate() override
-	{
-		spriteScoreTxt = new olc::Sprite("art/score.png");
-		spriteHighScoreTxt = new olc::Sprite("art/highScore.png");
-		spriteYourScoreTxt = new olc::Sprite("art/yourScore.png");
-		spriteLivesTxt = new olc::Sprite("art/life.png");
-		spriteLife = new olc::Sprite("art/getALife.png");
-		spriteEnemyBig = new olc::Sprite("art/alienBig.png");
-		spriteGameOver = new olc::Sprite("art/gameOver.png");
-		spritePlayer = new olc::Sprite("art/player.png");
-		spriteFlameBig = new olc::Sprite("art/flameBig.png");
-		spriteFlameSmall = new olc::Sprite("art/flameSmall.png");
-		spriteEnemy = new olc::Sprite("art/enemy.png");
-		//spriteEnemyBig = new olc::Sprite("art/enemyBig.png");
-		spriteProjectile = new olc::Sprite("art/projectile.png");
-		spriteEnemyProjectile = new olc::Sprite("art/shootAliens.png");
-		spritePowerUp = new olc::Sprite("art/powerUp.png");
-
-		spritesHearts[0] = new olc::Sprite("art/heart0.png");
-		spritesHearts[1] = new olc::Sprite("art/heart1.png");
-		spritesHearts[2] = new olc::Sprite("art/heart2.png");
-		spritesHearts[3] = new olc::Sprite("art/heart3.png");
-
-		spritesDigits[0][0] = new olc::Sprite("art/0.png");
-		spritesDigits[0][1] = new olc::Sprite("art/1.png");
-		spritesDigits[0][2] = new olc::Sprite("art/2.png");
-		spritesDigits[0][3] = new olc::Sprite("art/3.png");
-		spritesDigits[0][4] = new olc::Sprite("art/4.png");
-		spritesDigits[0][5] = new olc::Sprite("art/5.png");
-		spritesDigits[0][6] = new olc::Sprite("art/6.png");
-		spritesDigits[0][7] = new olc::Sprite("art/7.png");
-		spritesDigits[0][8] = new olc::Sprite("art/8.png");
-		spritesDigits[0][9] = new olc::Sprite("art/9.png");
-
-		spritesDigits[1][0] = new olc::Sprite("art/big0.png");
-		spritesDigits[1][1] = new olc::Sprite("art/big1.png");
-		spritesDigits[1][2] = new olc::Sprite("art/big2.png");
-		spritesDigits[1][3] = new olc::Sprite("art/big3.png");
-		spritesDigits[1][4] = new olc::Sprite("art/big4.png");
-		spritesDigits[1][5] = new olc::Sprite("art/big5.png");
-		spritesDigits[1][6] = new olc::Sprite("art/big6.png");
-		spritesDigits[1][7] = new olc::Sprite("art/big7.png");
-		spritesDigits[1][8] = new olc::Sprite("art/big8.png");
-		spritesDigits[1][9] = new olc::Sprite("art/big9.png");
-
-		spritesExplosion[0][0] = new olc::Sprite("art/enemyExplosion1-1.png");
-		spritesExplosion[0][1] = new olc::Sprite("art/enemyExplosion1-2.png");
-		spritesExplosion[0][2] = new olc::Sprite("art/enemyExplosion1-3.png");
-		spritesExplosion[0][3] = new olc::Sprite("art/enemyExplosion1-4.png");
-		spritesExplosion[0][4] = new olc::Sprite("art/enemyExplosion1-5.png");
-
-		spritesExplosion[1][0] = new olc::Sprite("art/enemyExplosion2-1.png");
-		spritesExplosion[1][1] = new olc::Sprite("art/enemyExplosion2-2.png");
-		spritesExplosion[1][2] = new olc::Sprite("art/enemyExplosion2-3.png");
-		spritesExplosion[1][3] = new olc::Sprite("art/enemyExplosion2-4.png");
-		spritesExplosion[1][4] = new olc::Sprite("art/enemyExplosion2-5.png");
-
-		spritesExplosion[2][0] = new olc::Sprite("art/enemyExplosion3-1.png");
-		spritesExplosion[2][1] = new olc::Sprite("art/enemyExplosion3-2.png");
-		spritesExplosion[2][2] = new olc::Sprite("art/enemyExplosion3-3.png");
-		spritesExplosion[2][3] = new olc::Sprite("art/enemyExplosion3-4.png");
-		spritesExplosion[2][4] = new olc::Sprite("art/enemyExplosion3-5.png");
-
-		spritesExplosion[3][0] = new olc::Sprite("art/enemyExplosion4-1.png");
-		spritesExplosion[3][1] = new olc::Sprite("art/enemyExplosion4-2.png");
-		spritesExplosion[3][2] = new olc::Sprite("art/enemyExplosion4-3.png");
-		spritesExplosion[3][3] = new olc::Sprite("art/enemyExplosion4-4.png");
-		spritesExplosion[3][4] = new olc::Sprite("art/enemyExplosion4-5.png");
-
-		spritesExplosionPlayer[0] = new olc::Sprite("art/explosionPlayer0.png");
-		spritesExplosionPlayer[1] = new olc::Sprite("art/explosionPlayer1.png");
-		spritesExplosionPlayer[2] = new olc::Sprite("art/explosionPlayer2.png");
-		spritesExplosionPlayer[3] = new olc::Sprite("art/explosionPlayer3.png");
-		spritesExplosionPlayer[4] = new olc::Sprite("art/explosionPlayer4.png");
-		spritesExplosionPlayer[5] = new olc::Sprite("art/explosionPlayer5.png");
-		spritesExplosionPlayer[6] = new olc::Sprite("art/explosionPlayer6.png");
-
-		// Read the contents of the specified file.
-		std::vector<char> fileContents;
-		{
-			FILE* f = fopen("game.ts", "rb");
-			if (f != nullptr) {
-				fseek(f, 0, SEEK_END);
-				const size_t fsize = ftell(f);
-				fseek(f, 0, SEEK_SET);
-				fileContents.resize(fsize);
-				fread(fileContents.data(), 1, fsize, f);
-				fclose(f);
-
-				fileContents.push_back('\0');
-			}
-		}
-
-		try 
-		{
-			std ::vector<Token> tokens;
-
-			Lexer lexer;
-			lexer.getAllTokens(fileContents.data(), tokens);
-
-			p.m_token = tokens.data();
-
-			p.parse();
-			AstNode* root = p.root;
-
-			//
-			NativeFnPtr const sin = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(sinf(argv[0]->m_value_f32));
-				return 1;
-			};
-			e.newVariableNativeFunction("sin", sin);
-
-			//
-			NativeFnPtr const getRandomNmbr = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				float res = (float)(rand() % 10000) / 10000.f;
-				*ppResultVariable = exec->newVariableFloat(res);
-				return 1;
-			};
-			e.newVariableNativeFunction("getRandomNmbr", getRandomNmbr);
-
-
-			NativeFnPtr const getXMoveInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-
-				float f = 0.f;
-				f -= !!g_game->GetKey(olc::LEFT).bHeld;
-				f += !!g_game->GetKey(olc::RIGHT).bHeld;
-
-				*ppResultVariable = exec->newVariableFloat(f);
-				return 1;
-			};
-
-			e.newVariableNativeFunction("getXMoveInput", getXMoveInput);
-
-			NativeFnPtr const getYMoveInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-
-				float f = 0.f;
-				f -= !!g_game->GetKey(olc::UP).bHeld;
-				f += !!g_game->GetKey(olc::DOWN).bHeld;
-
-				*ppResultVariable = exec->newVariableFloat(f);
-				return 1;
-			};
-
-			e.newVariableNativeFunction("getYMoveInput", getYMoveInput);
-
-			NativeFnPtr const shouldUseMouseForInput = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(!!g_game->preferMouseForShipControl);
-				return 1;
-			};
-
-			e.newVariableNativeFunction("shouldUseMouseForInput", shouldUseMouseForInput);
-
-			NativeFnPtr const getMouseX = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(g_game->GetMouseX());
-				return 1;
-			};
-
-			e.newVariableNativeFunction("getMouseX", getMouseX);
-
-			NativeFnPtr const getMouseY = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(g_game->GetMouseY());
-				return 1;
-			};
-
-			e.newVariableNativeFunction("getMouseY", getMouseY);
-
-
-			NativeFnPtr const isFireBtnPressed = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
-				*ppResultVariable = exec->newVariableFloat(g_game->GetKey(olc::Q).bHeld || g_game->GetMouse(0).bHeld);
-				return 1;
-			};
-
-			e.newVariableNativeFunction("isFireBtnPressed", isFireBtnPressed);
-
-			e.parser = &p;
-			Executor::EvalCtx ctx;
-			e.evaluate(root, ctx);
-
-			AstFnCall fnCall(Location(0,0));
-
-			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("initGame", false, false)->m_fnIdx];
-			Executor::EvalCtx ctx2;
-			e.evaluate(&fnCall, ctx2);
-
-		}
-		catch(Error& e)
-		{
-			printf("Error at %d, %d:\n\t%s", e.location.line, e.location.column, e.message.c_str());
-		}
-		catch(...)
-		{
-			printf("Unknown error");
-		}
-
-
-		return true;
-	}
-
-	bool OnUserUpdate(float fElapsedTime) override
-	{
-		const auto drawNumber = [&](int useBig, int x, int y, int number, float tint) -> void {
-			number = abs(number);
-			int numDigits = 1;
-
-			while(pow(10, numDigits) < number) {
-				numDigits++;
-			}
-
-			int offsetX = 0;
-			for(int t = numDigits; t > 0; --t) {
-				int n = number % (int)(pow(10, t));
-				n = n / pow(10, t-1);
-				DrawSprite(x + offsetX, y, spritesDigits[useBig][n], tint);
-				offsetX += spritesDigits[useBig][0]->width;
-			}
-		};
-
-		globalTime += fElapsedTime;
-
-		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
-		
-		const float gameTint = isGameOver ? 0.5f : 1.f;
-
-		// Clear the screen.
-		SetPixelMode(olc::Pixel::NORMAL);
-		for(int h = 0; h < GetDrawTargetHeight(); h++)
-		{
-			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
-			for(int w = 0; w < GetDrawTargetWidth(); w++) {
-				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(
-					gameTint*((1.f - k)*20 + k * 144), 
-					gameTint*((1.f - k)*32 + k * 184), 
-					gameTint*((1.f - k)*74 + k * 177));				
-			}
-		}
-
-		if(GetKey(olc::LEFT).bHeld || GetKey(olc::RIGHT).bHeld || GetKey(olc::UP).bHeld || GetKey(olc::DOWN).bHeld) {
-			preferMouseForShipControl = false;
-		}
-
-		if(GetMouse(0).bHeld) {
-			preferMouseForShipControl = true;
-		}
-		
-
-		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
-
-		//
-		isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
-
-		// Restart the game if needed.
-		if(isGameOver && (GetKey(olc::Q).bPressed || GetMouse(0).bPressed) && e.findVariableInScope("g_timeSpentDead", false, false)->m_value_f32 > 0.5f) {
-			AstFnCall fnCall(Location(0,0));
-			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("initGame", false, false)->m_fnIdx];
-			Executor::EvalCtx ctx2;
-			e.evaluate(&fnCall, ctx2);
-			isGameOver = false;
-		}
-
-		// Call update.
-		e.findVariableInScope("g_dt", false, false)->m_value_f32 = fElapsedTime;
-
-		{
-			AstFnCall fnCall(Location(0,0));
-			fnCall.theFunction = p.m_fnIdx2fn[e.findVariableInScope("updateGame", false, false)->m_fnIdx];
-			Executor::EvalCtx ctx2;
-			e.evaluate(&fnCall, ctx2);
-		}
-
-		int playerLivesCnt = 0;
-		for(int t = 0; t < tsAllGameObjects->m_arrayValues->size(); ++t) {
-			Var& tsObj = (*tsAllGameObjects->m_arrayValues)[t];
-
-			const float radius = tsObj.m_tableLUT->at("radius").m_value_f32;
-			const float x = tsObj.m_tableLUT->at("x").m_value_f32 - radius;
-			const float y = tsObj.m_tableLUT->at("y").m_value_f32 - radius;
-
-			std::string& type = tsObj.m_tableLUT->at("type").m_value_string;
-			
-			SetPixelMode(olc::Pixel::ALPHA);
-			if(type == "player") {
-				const float hitCooldown = playerLivesCnt = tsObj.m_tableLUT->at("hitCooldown").m_value_f32;
-				playerLivesCnt = tsObj.m_tableLUT->at("health").m_value_f32;
-				const float recoil = tsObj.m_tableLUT->at("recoil").m_value_f32;
-				const float px = x;
-				const float py = y + sin(recoil * recoil * 3.14f) * 15;
-				
-				bool shouldDraw = hitCooldown <= 0.f;
-				if(hitCooldown > 0.f)
-				{
-					shouldDraw = sinf(globalTime * 6.28 * 6.f) > 0.f;
-				}
-
-				if(shouldDraw) {
-					DrawSprite(px, py, spritePlayer, gameTint);
-					if(sinf(globalTime * 6.28 * 3) > 0.f) {
-						DrawSprite(px, py + 128, spriteFlameBig, gameTint);
-					} else {
-						DrawSprite(px, py + 128, spriteFlameSmall, gameTint);
-					}
-				}
-			}
-			else if(type == "explosion")
-			{
-				// Pick the sprite sheet for the explosion based on the index.
-				if(tsObj.m_tableLUT->at("isForPlayer").m_value_f32)
-				{
-					const float duration = 0.5;
-					const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
-					int frame = (progress / duration) * 6;
-					if(frame > 6) frame = 6;
-
-					DrawSprite(x, y, spritesExplosionPlayer[frame], gameTint);
-				}
-				else
-				{
-					const int sheetIndex = (int)(tsObj.m_tableLUT->at("id").m_value_f32) % 4;
-
-					const float duration = 0.250f;
-					const float progress = tsObj.m_tableLUT->at("progress").m_value_f32;
-					int frame = (progress / duration) * 4;
-					if(frame > 4) frame = 4;
-
-					DrawSprite(x, y, spritesExplosion[sheetIndex][frame], gameTint);
-				}
-			}
-			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, gameTint);
-			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, gameTint);
-			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, gameTint);
-			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, gameTint);
-			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, gameTint);
-			else if(type == "healthUp") DrawSprite(x, y, spriteLife, gameTint);
-		}
-
-		const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
-		DrawSprite(10,20, spriteScoreTxt, gameTint);
-		drawNumber(false, 110 + 10, 20, score, gameTint);
-
-		if(isGameOver) {
-
-			// Update the highscore.
-			if(wasGameOver == false){
-				FILE* f = fopen("score.dat", "rb");
-				if(f){
-					fread(&prevHighScore, sizeof(prevHighScore), 1, f);
-					fclose(f);
-				}
-
-				if(score > prevHighScore) {
-					f = fopen("score.dat", "wb+");
-					if(f)
-					{
-						fwrite(&score, sizeof(score), 1, f);
-						fclose(f);
-					}
-				}
-			}
-
-			DrawSprite(400 - 314, 150, spriteGameOver, 1);
-
-			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
-			DrawSprite(400 - 314, 380, spriteHighScoreTxt, 1);
-			drawNumber(true, 400 - 314 + spriteHighScoreTxt->width + 5, 380, prevHighScore, 1.f);
-
-			DrawSprite(400 - 314, 451, spriteYourScoreTxt, 1);
-			drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f);
-		}
-
-		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, gameTint);
-
-		if(playerLivesCnt < 0) playerLivesCnt = 0;
-		if(playerLivesCnt > 3) playerLivesCnt = 3;
-
-		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt], gameTint);
-
-		wasGameOver = isGameOver;
-
-		return true;
-	}
-};
-
-#if 1
-int main()
-{
-	g_game = new Game;
-	if(g_game->Construct(800, 800, 1, 1)) {
-		g_game->Start();
-	}
-
-	return 0;
-}
-#else
 int main(int argc, const char* argv[])
 {
 	if(argc <= 1) {
@@ -2104,21 +1684,21 @@ int main(int argc, const char* argv[])
 
 	try 
 	{
+		// Generate the token list for the parser.
 		std ::vector<Token> tokens;
-
 		Lexer lexer;
 		lexer.getAllTokens(fileContents.data(), tokens);
 
+		// Update the list of tokens that are going to be used for parsing and well... parse them.
 		Parser p;
 		p.m_token = tokens.data();
+		AstNode* nodeToExecute = p.parse();
 
-		p.parse();
-		AstNode* root = p.root;
-
+		// Evaluate the produced AST.
 		Executor e;
 		e.parser = &p;
 		Executor::EvalCtx ctx;
-		e.evaluate(root, ctx);
+		e.evaluate(nodeToExecute, ctx);
 	}
 	catch(Error& e)
 	{
@@ -2133,4 +1713,3 @@ int main(int argc, const char* argv[])
 
 	return 0;
 }
-#endif
