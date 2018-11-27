@@ -32,10 +32,10 @@ struct Error
 };
 
 // Set to 1 when debugging.
-#if 1
-	#define ThrowError(location, msg) do {assert(false); throw Error(location, msg); } while(false)
+#if 0
+#define ThrowError(location, msg) do {assert(false); throw Error(location, msg); } while(false)
 #else
-	#define ThrowError(location, msg) do { throw Error(location, msg); } while(false)
+#define ThrowError(location, msg) do { throw Error(location, msg); } while(false)
 #endif
 
 // Identifies the type of the token (also know as lexeme) matched by the lexer.
@@ -54,34 +54,34 @@ enum TokenType : int
 	tokenType_assign, // =
 	tokenType_less, // <
 	tokenType_greater, // >
-	//tokenType_lessEquals, // <=
-	//tokenType_greaterEquals, // >=
-	tokenType_equals, // ==
-	tokenType_notEquals, // !=
-	tokenType_lessEquals, // <=
-	tokenType_greaterEquals, // >=
-	tokenType_not, // !
-	tokenType_plus, // +
-	tokenType_minus, // -
-	tokenType_asterisk, // *
-	tokenType_slash, // /
-	tokenType_lparen, // (
-	tokenType_rparen, // )
-	tokenType_lsqBracket, // [
-	tokenType_rsqBracket, // ]
-	tokenType_blockBegin, // {
-	tokenType_blockEnd, // }
-	tokenType_semicolon, // ;
+										 //tokenType_lessEquals, // <=
+										 //tokenType_greaterEquals, // >=
+										 tokenType_equals, // ==
+										 tokenType_notEquals, // !=
+										 tokenType_lessEquals, // <=
+										 tokenType_greaterEquals, // >=
+										 tokenType_not, // !
+										 tokenType_plus, // +
+										 tokenType_minus, // -
+										 tokenType_asterisk, // *
+										 tokenType_slash, // /
+										 tokenType_lparen, // (
+										 tokenType_rparen, // )
+										 tokenType_lsqBracket, // [
+										 tokenType_rsqBracket, // ]
+										 tokenType_blockBegin, // {
+										 tokenType_blockEnd, // }
+										 tokenType_semicolon, // ;
 
-	// keywords.
-	tokenType_fn,
-	tokenType_if,
-	tokenType_else,
-	tokenType_while,
-	tokenType_for,
-	tokenType_return,
-	tokenType_print,
-	tokenType_array,
+																					// keywords.
+																					tokenType_fn,
+																					tokenType_if,
+																					tokenType_else,
+																					tokenType_while,
+																					tokenType_for,
+																					tokenType_return,
+																					tokenType_print,
+																					tokenType_array,
 };
 
 // A token (also known as lexeme) matched by the lexter.
@@ -305,7 +305,7 @@ struct AstNode
 		: type(type)
 		, location(location)
 	{}
-	
+
 	virtual ~AstNode() = default;
 
 	Location location; // the location of the expression in the code, ot at least where the expression starts.
@@ -521,19 +521,23 @@ struct AstReturn : public AstNode
 	AstNode* expression;
 };
 
+// The parser itself.
+// Takes a list of tokens and produces an AST.
 struct Parser
 {
-	AstNode* root = nullptr;
 	const Token* m_token = nullptr;
 	std::unordered_map<int, AstFnDecl*> m_fnIdx2fn;
 
+	// Registers the specified AstFnDecl, and gives the function specified by it a unique id(in that case just an index in a Look-Up-Table).
+	// This id is used to identify the function and to perform function calls.
 	void registerFunction(AstFnDecl* const fnDecl) {
 		fnDecl->fnIdx = m_fnIdx2fn.size();
 		m_fnIdx2fn[m_fnIdx2fn.size()] = fnDecl;
 	}
 
-	void parse() {
-		root = parse_programRoot();
+	// Parses the specified list of token stored in m_token array (assums that the last token is tokenType_endToken).
+	AstNode* parse() {
+		return parse_programRoot();
 	}
 
 	// A block of statements or a single statement.
@@ -601,7 +605,7 @@ struct Parser
 
 			astFor->initExpression = parse_expression();
 			match(tokenType_semicolon);
-			
+
 			astFor->expression = parse_expression();
 			match(tokenType_semicolon);
 
@@ -653,7 +657,7 @@ struct Parser
 	AstNode* parse_expression()
 	{
 		AstNode* left = parse_expression6();
-		
+
 		return left;
 	}
 
@@ -755,10 +759,7 @@ struct Parser
 
 			if(m_token->type == tokenType_comma) {
 				match(tokenType_comma);
-			} else {
-				ThrowError(m_token->location, "Expected }");
-				return nullptr;
-			}
+			} 
 		}
 		match(tokenType_blockEnd);
 
@@ -806,7 +807,6 @@ struct Parser
 			left = parse_expression_fndecl();
 		}
 
-		//
 		if(left == nullptr) {
 			ThrowError(m_token->location, "Unknown expression");
 			return nullptr;
@@ -858,7 +858,7 @@ struct Parser
 				left = memberAcess;
 			}
 		}
-	
+
 		return left;
 	}
 
@@ -1009,6 +1009,12 @@ struct Parser
 	}
 };
 
+//-----------------------------------------------------------------------------------------------------
+// The Executor (also know as Interpreter or Virtual Machine) and all the data that is needed to
+// execute our script.
+//-----------------------------------------------------------------------------------------------------
+
+// An enum describing all posible variable types that out language could handle.
 enum VarType : int
 {
 	varType_undefined,
@@ -1020,10 +1026,13 @@ enum VarType : int
 	varType_fnNative, // A C++ function basically.
 };
 
+// A common typedef used for interop between the scrpting language and C++.
+// Example usages are: array_size array_push array_pop functions in the language.
 struct Var;
 struct Executor;
 typedef int (*NativeFnPtr)(int argc, Var* argv[], Executor* exec, Var** ppResultVariable);
 
+// The strcture that represents a single value(and variable) while executing the script.
 struct Var
 {
 	Var(VarType const varType = varType_undefined)
@@ -1038,30 +1047,26 @@ struct Var
 		}
 	}
 
-	void makeFloat32(const float value)
-	{
+	// TODO: These are kind of redundant and can be removed with a bit of work.
+	void makeFloat32(const float value) {
 		*this = Var(varType_f32);
 		m_value_f32 = value;
 	}
 
-	void makeString(std::string s)
-	{
+	void makeString(std::string s) {
 		*this = Var(varType_string);
 		m_value_string = std::move(s);
 	}
 
-	void makeTable()
-	{
+	void makeTable() {
 		*this = Var(varType_table);
 	}
 
-	void makeArray()
-	{
+	void makeArray() {
 		*this = Var(varType_array);
 	}
 
-	void makeFunction(int functionIndex)
-	{
+	void makeFunction(int functionIndex) {
 		*this = Var(varType_fn);
 		m_fnIdx = functionIndex;
 	}
@@ -1073,16 +1078,21 @@ struct Var
 
 public :
 
-	VarType m_varType = varType_undefined; // Flags of enum VarFlag
+	VarType m_varType = varType_undefined;
 
-	float m_value_f32 = 0.f;
-	int m_fnIdx = -1;
-	NativeFnPtr m_fnNative = nullptr;
-	std::string m_value_string;
-	std::shared_ptr<std::unordered_map<std::string, Var>> m_tableLUT; // member name ot variable
-	std::shared_ptr<std::vector<Var>> m_arrayValues; // member name ot variable
+	// The data that could be used depending on the type of the variable:
+	float m_value_f32 = 0.f; // A float representing a number in our language.
+	int m_fnIdx = -1;  // An int containing the function id of the function that we point to (see registerFunction).
+	NativeFnPtr m_fnNative = nullptr; // Used to enable our script to call native C++ functions via that function-pointer typedef.
+	std::string m_value_string; // A std::string for strings in our language.
+
+															// These two are shared_ptrs in order to replicate the bahiavior that is used in JavaScript.
+															// When we pass these around we pass them by reference (all other types are by value).
+	std::shared_ptr<std::unordered_map<std::string, Var>> m_tableLUT; // If this variable is a table, holds names and values of all of its members.
+	std::shared_ptr<std::vector<Var>> m_arrayValues; // If this is an array, hold the member values for each index.
 };
 
+// Just a function that prints the type and value of the specified variable to std::out.
 void printVariable(const Var* const expr)
 {
 	if(expr->m_varType == varType_f32)
@@ -1095,12 +1105,12 @@ void printVariable(const Var* const expr)
 	{
 		printf("{ \n");
 		if(expr->m_tableLUT)
-		for(auto& pair : *expr->m_tableLUT)
-		{
-			printf("%s = ", pair.first.c_str());
-			printVariable(&pair.second);
-			
-		}
+			for(auto& pair : *expr->m_tableLUT)
+			{
+				printf("%s = ", pair.first.c_str());
+				printVariable(&pair.second);
+
+			}
 		printf(" }\n");
 	}
 	else if(expr->m_varType == varType_array)
@@ -1117,15 +1127,21 @@ void printVariable(const Var* const expr)
 		printf("<undefined>\n");
 };
 
+// Represents a 'scope' in our language. Each function or a block create it's own scope
+// in order to enable us to have colliding variable names.
+// Even if the variables are in different functions we still need this scope.
+// In our case, depending on the current block, we just amend all scopes (the currenct scope is stored in an array).,
+// at the begining of the variable name - this is name collisions are resolved.
 struct Scope
 {
 	std::string scope;
 };
 
+// The executor itself.
+// Takes and AST node and executes.
 struct Executor
 {
-	Executor()
-	{
+	Executor() {
 		addStnadardLibFunctions();
 	}
 
@@ -1153,9 +1169,9 @@ struct Executor
 	}
 
 	Var* newVariableRaw(const char* nameCStr, const VarType varType) {
-		
+
 		Var* const result = new Var(varType);
-		
+
 		if(nameCStr!=nullptr) {
 			//result->m_name = name;
 			m_variablesLut[nameCStr] = result;
@@ -1192,7 +1208,7 @@ struct Executor
 		for(int t = (int)(m_scopeStack.size()) - 1; t != -2; --t)
 		{
 			std::string name = (t == -1) ? baseName : m_scopeStack[t] + " " + baseName;;
-		
+
 			auto itr = m_variablesLut.find(name);
 			if(itr == std::end(m_variablesLut)) {
 
@@ -1268,7 +1284,7 @@ struct Executor
 				{
 					return &itr->second;
 				}
-				
+
 			}break;
 			case astNodeType_tableMaker:
 			{
@@ -1287,7 +1303,7 @@ struct Executor
 				Var* result = newVariableRaw(nullptr, varType_array);
 				for(const AstNode* const expr : n->arrayElements)
 				{
-					 ;
+					;
 					(*result->m_arrayValues).push_back(*evaluate(expr, ctx));
 				}
 
@@ -1343,9 +1359,9 @@ struct Executor
 						return newVariableString(reult);
 					}
 				}
-				
+
 				// Unknown operation.
-				ThrowError(n->location, "Uknown binary operation");
+				ThrowError(n->location, "Uknown/Unimplemented binary operation");
 			}break;
 			case astNodeType_unop:
 			{
@@ -1440,7 +1456,7 @@ struct Executor
 						}
 					}
 				}
-				
+
 				ThrowError(n->location, "Uknown function call");
 				return nullptr;
 			}break;
@@ -1476,15 +1492,16 @@ struct Executor
 					pushScope(n, nullptr);
 				}
 
+				Var* result = nullptr;
 				for(AstNode* node : n->m_statements) {
-					evaluate(node, ctx);
+					result = evaluate(node, ctx);
 				}
 
 				if(n->needsOwnScope) {
 					popScope();
 				}
 
-				return nullptr;
+				return result;
 			}break;
 			case astNodeType_if:
 			{
@@ -1517,7 +1534,7 @@ struct Executor
 					expr = evaluate(n->expression, ctx);
 				}
 				popScope();
-	
+
 				return nullptr;
 			}break;
 			case astNodeType_for:
@@ -1581,11 +1598,11 @@ private :
 		};
 
 		newVariableNativeFunction("array_size", array_size);
-	
+
 		NativeFnPtr const array_pop = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
 			if(argv[0] == nullptr|| argv[0]->m_varType != varType_array)
 				return 0;
-			
+
 			if(argc == 1)
 			{
 
@@ -1610,7 +1627,7 @@ private :
 
 			return 1;
 		};
-	
+
 		newVariableNativeFunction("array_pop", array_pop);
 
 		NativeFnPtr const array_push = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
@@ -1628,13 +1645,12 @@ private :
 		};
 
 		newVariableNativeFunction("array_push", array_push);
-
 	}
-	
-	
 
 public :
 
+	// TODO: Currently "Parser* parser" used only for m_fnIdx2fn, with a tiny bit of work this dependancy could be removed.
+	// This currently prevents us form injecting more code in our enviornment.
 	Parser* parser = nullptr;
 	std::unordered_map<std::string, Var*> m_variablesLut;
 	std::vector<Var*> m_allocatedVariables;
@@ -1659,6 +1675,7 @@ struct Game : public olc::PixelGameEngine
 	Executor e;
 
 	bool preferMouseForShipControl = false;
+	olc::Sprite *spriteBeginScreen = nullptr;
 	olc::Sprite *spritesDigits[2][10] = { nullptr };
 	olc::Sprite *spritesHearts[4] = { nullptr };
 	olc::Sprite *spriteScoreTxt = nullptr;
@@ -1690,6 +1707,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserCreate() override
 	{
+		spriteBeginScreen = new olc::Sprite("art/beginScreen.png");
 		spriteScoreTxt = new olc::Sprite("art/score.png");
 		spriteHighScoreTxt = new olc::Sprite("art/highScore.png");
 		spriteYourScoreTxt = new olc::Sprite("art/yourScore.png");
@@ -1790,8 +1808,7 @@ struct Game : public olc::PixelGameEngine
 
 			p.m_token = tokens.data();
 
-			p.parse();
-			AstNode* root = p.root;
+			AstNode* const root = p.parse();
 
 			//
 			NativeFnPtr const sin = [](int argc, Var* argv[], Executor* exec, Var** ppResultVariable) -> int {
@@ -1888,6 +1905,7 @@ struct Game : public olc::PixelGameEngine
 
 	bool OnUserUpdate(float fElapsedTime) override
 	{
+		SetPixelMode(olc::Pixel::ALPHA);
 		const auto drawNumber = [&](int useBig, int x, int y, int number, float tint) -> void {
 			number = abs(number);
 			int numDigits = 1;
@@ -1911,8 +1929,7 @@ struct Game : public olc::PixelGameEngine
 		
 		const float gameTint = isGameOver ? 0.5f : 1.f;
 
-		// Clear the screen.
-		SetPixelMode(olc::Pixel::NORMAL);
+		// Clear the screen.;
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
 		{
 			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
@@ -1932,6 +1949,7 @@ struct Game : public olc::PixelGameEngine
 			preferMouseForShipControl = true;
 		}
 		
+
 
 		const Var* const tsAllGameObjects = e.findVariableInScope("g_allGameObjects", false, false);
 
@@ -1967,7 +1985,6 @@ struct Game : public olc::PixelGameEngine
 
 			std::string& type = tsObj.m_tableLUT->at("type").m_value_string;
 			
-			SetPixelMode(olc::Pixel::ALPHA);
 			if(type == "player") {
 				const float hitCooldown = playerLivesCnt = tsObj.m_tableLUT->at("hitCooldown").m_value_f32;
 				playerLivesCnt = tsObj.m_tableLUT->at("health").m_value_f32;
@@ -2046,14 +2063,19 @@ struct Game : public olc::PixelGameEngine
 				}
 			}
 
-			DrawSprite(400 - 314, 150, spriteGameOver, 1);
-
 			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
-			DrawSprite(400 - 314, 380, spriteHighScoreTxt, 1);
-			drawNumber(true, 400 - 314 + spriteHighScoreTxt->width + 5, 380, prevHighScore, 1.f);
 
-			DrawSprite(400 - 314, 451, spriteYourScoreTxt, 1);
-			drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f);
+			if(score == 0) {
+				DrawSprite(0,0, spriteBeginScreen, 1.f);
+			} else {
+				DrawSprite(400 - 314, 150, spriteGameOver, 1);
+
+				DrawSprite(400 - 314, 380, spriteHighScoreTxt, 1);
+				drawNumber(true, 400 - 314 + spriteHighScoreTxt->width + 5, 380, prevHighScore, 1.f);
+
+				DrawSprite(400 - 314, 451, spriteYourScoreTxt, 1);
+				drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f);
+			}
 		}
 
 		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, gameTint);

@@ -1,9 +1,11 @@
 //-----------------------------------------------------
 // Globals for the game.
 //------------------------------------------------------
+g_numberOfRestarts  = 0;
 g_allGameObjects = array{};
 g_nextId = 0;
 g_player = 0;
+
 //------------------------------------------------------
 // Globals updated by the so called "engine".
 //------------------------------------------------------
@@ -14,7 +16,7 @@ g_dt = 0.0;
 //------------------------------------------------------
 g_score = 0;
 g_displayScore = 0;
-g_isGameOver = 0;
+g_isGameOver = 1;
 g_timeSpentDead = 0;
 
 //-----------------------------------------------------
@@ -155,14 +157,18 @@ makeExplosion = fn(x, y, isForPlayer) {
 // everything to it's defaults.
 //------------------------------------------------------
 initGame = fn() {
-	g_isGameOver = 0;
+	g_isGameOver = g_numberOfRestarts == 0;
 	g_timeSpentDead = 0;
 	g_allGameObjects = array{};
 	g_nextId = 0;
 	g_score = 0;
 	g_displayScore = 0;
 
-	array_push(g_allGameObjects, makePlayer(g_screenWidth * 0.5, g_screenHeight * 0.8));
+	if g_numberOfRestarts > 0 {
+		array_push(g_allGameObjects, makePlayer(g_screenWidth * 0.5, g_screenHeight * 0.8));
+	} else {
+		makePlayer(g_screenWidth * 0.5, g_screenHeight * 0.8);
+	}
 
 	array_push(g_allGameObjects, makeEnemy(100, -64));
 	array_push(g_allGameObjects, makeEnemyBig(200, -32));
@@ -181,6 +187,8 @@ initGame = fn() {
 
 	array_push(g_allGameObjects, makeEnemy(100, -64));
 	array_push(g_allGameObjects, makeEnemy(700, -32));
+	
+	g_numberOfRestarts = g_numberOfRestarts + 1;
 };
 
 //------------------------------------------------------
