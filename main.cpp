@@ -1906,7 +1906,7 @@ struct Game : public olc::PixelGameEngine
 	bool OnUserUpdate(float fElapsedTime) override
 	{
 		SetPixelMode(olc::Pixel::ALPHA);
-		const auto drawNumber = [&](int useBig, int x, int y, int number, float tint) -> void {
+		const auto drawNumber = [&](int useBig, int x, int y, int number, float tint, const float colorTint[3]) -> void {
 			number = abs(number);
 			int numDigits = 1;
 
@@ -1918,7 +1918,7 @@ struct Game : public olc::PixelGameEngine
 			for(int t = numDigits; t > 0; --t) {
 				int n = number % (int)(pow(10, t));
 				n = n / pow(10, t-1);
-				DrawSprite(x + offsetX, y, spritesDigits[useBig][n], tint);
+				DrawSprite(x + offsetX, y, spritesDigits[useBig][n], tint, colorTint);
 				offsetX += spritesDigits[useBig][0]->width;
 			}
 		};
@@ -1926,8 +1926,17 @@ struct Game : public olc::PixelGameEngine
 		globalTime += fElapsedTime;
 
 		bool isGameOver = !!e.findVariableInScope("g_isGameOver", false, false)->m_value_f32;
+		bool isZeroRun = e.findVariableInScope("g_score", false, false)->m_value_f32 == 0.f;
+		const float gameTint = isGameOver ? (isZeroRun ? 0.3f : 0.5f) : 1.f;
 		
-		const float gameTint = isGameOver ? 0.5f : 1.f;
+		const float gameColorTint[3] = 
+		{
+			isGameOver ? (isZeroRun ? 255.f : 0.f) : 0.f,
+			isGameOver ? (isZeroRun ? 255.f : 0.f) : 0.f,
+			isGameOver ? (isZeroRun ? 255.f : 0.f) : 0.f,
+		};
+
+		const float colorTint1[3] = { 1.f, 1.f, 1.f };
 
 		// Clear the screen.;
 		for(int h = 0; h < GetDrawTargetHeight(); h++)
@@ -1935,9 +1944,9 @@ struct Game : public olc::PixelGameEngine
 			const float k = sinf(3.14 * 0.5f * (float)h / (float)GetDrawTargetHeight());
 			for(int w = 0; w < GetDrawTargetWidth(); w++) {
 				GetDrawTarget()->GetData()[w + h*GetDrawTargetWidth()] = olc::Pixel(
-					gameTint*((1.f - k)*20 + k * 144), 
-					gameTint*((1.f - k)*32 + k * 184), 
-					gameTint*((1.f - k)*74 + k * 177));				
+					gameTint*((1.f - k)*20 + k * 144) + 1.f - gameTint * (gameColorTint[0]), 
+					gameTint*((1.f - k)*32 + k * 184) + 1.f - gameTint * (gameColorTint[1]), 
+					gameTint*((1.f - k)*74 + k * 177) + 1.f - gameTint * (gameColorTint[2]));				
 			}
 		}
 
@@ -1999,11 +2008,11 @@ struct Game : public olc::PixelGameEngine
 				}
 
 				if(shouldDraw) {
-					DrawSprite(px, py, spritePlayer, gameTint);
+					DrawSprite(px, py, spritePlayer, gameTint, gameColorTint);
 					if(sinf(globalTime * 6.28 * 3) > 0.f) {
-						DrawSprite(px, py + 128, spriteFlameBig, gameTint);
+						DrawSprite(px, py + 128, spriteFlameBig, gameTint, gameColorTint);
 					} else {
-						DrawSprite(px, py + 128, spriteFlameSmall, gameTint);
+						DrawSprite(px, py + 128, spriteFlameSmall, gameTint, gameColorTint);
 					}
 				}
 			}
@@ -2017,7 +2026,7 @@ struct Game : public olc::PixelGameEngine
 					int frame = (progress / duration) * 6;
 					if(frame > 6) frame = 6;
 
-					DrawSprite(x, y, spritesExplosionPlayer[frame], gameTint);
+					DrawSprite(x, y, spritesExplosionPlayer[frame], gameTint, gameColorTint);
 				}
 				else
 				{
@@ -2028,20 +2037,20 @@ struct Game : public olc::PixelGameEngine
 					int frame = (progress / duration) * 4;
 					if(frame > 4) frame = 4;
 
-					DrawSprite(x, y, spritesExplosion[sheetIndex][frame], gameTint);
+					DrawSprite(x, y, spritesExplosion[sheetIndex][frame], gameTint, gameColorTint);
 				}
 			}
-			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, gameTint);
-			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, gameTint);
-			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, gameTint);
-			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, gameTint);
-			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, gameTint);
-			else if(type == "healthUp") DrawSprite(x, y, spriteLife, gameTint);
+			else if(type == "enemy") DrawSprite(x, y, spriteEnemy, gameTint, gameColorTint);
+			else if(type == "enemyBig") DrawSprite(x, y, spriteEnemyBig, gameTint, gameColorTint);
+			else if(type == "projectile") DrawSprite(x, y, spriteProjectile, gameTint, gameColorTint);
+			else if(type == "enemyProjectile") DrawSprite(x, y, spriteEnemyProjectile, gameTint, gameColorTint);
+			else if(type == "powerUp") DrawSprite(x, y, spritePowerUp, gameTint, gameColorTint);
+			else if(type == "healthUp") DrawSprite(x, y, spriteLife, gameTint, gameColorTint);
 		}
 
 		const int score = (int)e.findVariableInScope("g_displayScore", false, false)->m_value_f32;
-		DrawSprite(10,20, spriteScoreTxt, gameTint);
-		drawNumber(false, 110 + 10, 20, score, gameTint);
+		DrawSprite(10,20, spriteScoreTxt, gameTint, gameColorTint);
+		drawNumber(false, 110 + 10, 20, score, gameTint, gameColorTint);
 
 		if(isGameOver) {
 
@@ -2066,24 +2075,24 @@ struct Game : public olc::PixelGameEngine
 			const int score = (int)e.findVariableInScope("g_score", false, false)->m_value_f32;
 
 			if(score == 0) {
-				DrawSprite(0,0, spriteBeginScreen, 1.f);
+				DrawSprite(0,0, spriteBeginScreen, 1.f, colorTint1);
 			} else {
-				DrawSprite(400 - 314, 150, spriteGameOver, 1);
+				DrawSprite(400 - 314, 150, spriteGameOver, 1, colorTint1);
 
-				DrawSprite(400 - 314, 380, spriteHighScoreTxt, 1);
-				drawNumber(true, 400 - 314 + spriteHighScoreTxt->width + 5, 380, prevHighScore, 1.f);
+				DrawSprite(400 - 314, 380, spriteHighScoreTxt, 1, colorTint1);
+				drawNumber(true, 400 - 314 + spriteHighScoreTxt->width + 5, 380, prevHighScore, 1.f, colorTint1);
 
-				DrawSprite(400 - 314, 451, spriteYourScoreTxt, 1);
-				drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f);
+				DrawSprite(400 - 314, 451, spriteYourScoreTxt, 1, colorTint1);
+				drawNumber(true, 400 - 314 + spriteYourScoreTxt->width + 5, 451, score, 1.f, colorTint1);
 			}
 		}
 
-		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, gameTint);
+		DrawSprite(800 - 110 - 54 - 10, 20, spriteLivesTxt, gameTint, gameColorTint);
 
 		if(playerLivesCnt < 0) playerLivesCnt = 0;
 		if(playerLivesCnt > 3) playerLivesCnt = 3;
 
-		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt], gameTint);
+		DrawSprite(800 - 54 - 10, 10, spritesHearts[playerLivesCnt], gameTint, gameColorTint);
 
 		wasGameOver = isGameOver;
 

@@ -390,7 +390,7 @@ namespace olc // All OneLoneCoder stuff will now exist in the "olc" namespace
 		void SetSubPixelOffset(float ox, float oy);
 
 		// Draws a single Pixel
-		virtual void Draw(int32_t x, int32_t y, Pixel p, float tint = 1.f);
+		virtual void Draw(int32_t x, int32_t y, Pixel p, float tint = 1.f, const float colorTint[3] = nullptr);
 		// Draws a line from (x1,y1) to (x2,y2)
 		void DrawLine(int32_t x1, int32_t y1, int32_t x2, int32_t y2, Pixel p = olc::WHITE);
 		// Draws a circle located at (x,y) with radius
@@ -406,7 +406,7 @@ namespace olc // All OneLoneCoder stuff will now exist in the "olc" namespace
 		// Flat fills a triangle between points (x1,y1), (x2,y2) and (x3,y3)
 		void FillTriangle(int32_t x1, int32_t y1, int32_t x2, int32_t y2, int32_t x3, int32_t y3, Pixel p = olc::WHITE);
 		// Draws an entire sprite at location (x,y)
-		void DrawSprite(int32_t x, int32_t y, Sprite *sprite, float tint, uint32_t scale = 1);
+		void DrawSprite(int32_t x, int32_t y, Sprite *sprite, float tint, const float colorTint[3], uint32_t scale = 1);
 		// Draws an area of a sprite at location (x,y), where the
 		// selected area is (ox,oy) to (ox+w,oy+h)
 		void DrawPartialSprite(int32_t x, int32_t y, Sprite *sprite, int32_t ox, int32_t oy, int32_t w, int32_t h, uint32_t scale = 1);
@@ -886,11 +886,19 @@ namespace olc
 		return nScreenHeight;
 	}
 
-	void PixelGameEngine::Draw(int32_t x, int32_t y, Pixel p, float tint)
+	void PixelGameEngine::Draw(int32_t x, int32_t y, Pixel p, float tint, const float colorTint[3])
 	{
 		if (!pDrawTarget) return;
 
-		p = p.tinted(tint);
+		if(colorTint) {
+			p.r = tint * p.r + colorTint[0] * (1.f - tint);
+			p.g = tint * p.g + colorTint[1] * (1.f - tint);
+			p.b = tint * p.b + colorTint[2] * (1.f - tint);
+		} else {
+			p.r = tint * p.r;
+			p.g = tint * p.g;
+			p.b = tint * p.b;
+		}
 
 		if (nPixelMode == Pixel::NORMAL)
 		{
@@ -1241,7 +1249,7 @@ namespace olc
 		}
 	}
 
-	void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite *sprite, float tint, uint32_t scale)
+	void PixelGameEngine::DrawSprite(int32_t x, int32_t y, Sprite *sprite, float tint, const float colorTint[3], uint32_t scale)
 	{
 		if (sprite == nullptr)
 			return;
@@ -1252,13 +1260,13 @@ namespace olc
 				for (int32_t j = 0; j < sprite->height; j++)
 					for (uint32_t is = 0; is < scale; is++)
 						for (uint32_t js = 0; js < scale; js++)
-							Draw(x + (i*scale) + is, y + (j*scale) + js, sprite->GetPixel(i, j), tint);
+							Draw(x + (i*scale) + is, y + (j*scale) + js, sprite->GetPixel(i, j), tint, colorTint);
 		}
 		else
 		{
 			for (int32_t i = 0; i < sprite->width; i++)
 				for (int32_t j = 0; j < sprite->height; j++)
-					Draw(x + i, y + j, sprite->GetPixel(i, j), tint);
+					Draw(x + i, y + j, sprite->GetPixel(i, j), tint, colorTint);
 		}
 	}
 
