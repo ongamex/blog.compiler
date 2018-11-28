@@ -1,11 +1,11 @@
 
 print "Start";
 
-numberAreBooleansHere = 1;
+numbersAreBooleansHere = 1;
 
 // if-statements are just opeators.
 //The last exprssion is concidered the value.
-x = if numberAreBooleansHere { 0; } else { 1 ;};
+x = if numbersAreBooleansHere { 0; } else { 1 ;};
 
 someTable = { x = x; y = 20; };
 someArray = array {someTable, 43};

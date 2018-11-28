@@ -1699,6 +1699,8 @@ int main(int argc, const char* argv[])
 		e.parser = &p;
 		Executor::EvalCtx ctx;
 		e.evaluate(nodeToExecute, ctx);
+
+		const int done = 0;
 	}
 	catch(Error& e)
 	{
